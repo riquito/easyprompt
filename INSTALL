@@ -1,0 +1,16 @@
+easyprompt richiede
+
+python >= 2.3 
+   http://www.python.org
+gtk+ >= 2.4 
+   http://www.gtk.org
+pygtk >= 2.3.92 
+   http://ftp.gnome.org/pub/GNOME/sources/pygtk/2.3/pygtk-2.3.92.tar.gz
+
+e' sufficiente lanciarlo per utilizzarlo
+verra' creata una directory
+~/.easyprompt/plugins
+dove vanno inseriti i propri plugins
+
+per installarlo, lanciare
+python setup.py install
