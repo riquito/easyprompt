@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
-__author__='Riccardo Attilio Galli <riccardo@sideralis.net>'
-__organization__='Sideralis Programs'
+__author__='Riccardo Attilio Galli <riccardo@sideralis.org>'
+__organization__='Sideralis'
 __version__='1.1.0'
 
 import gtk,pango,gobject
@@ -169,23 +169,16 @@ class promptTextView(gtk.TextView):
             else:
                 tag.set_property('foreground',rgb2hex(colors[name]))
             table.add(tag)
-        
 
-class HelpWindow(gtk.Window):
+class KeywordsBox(gtk.VBox):
     __gsignals__ = {
-        'shortcut-clicked' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
+        'keyword-clicked' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
                 (gobject.TYPE_PYOBJECT,))
     }
-
     
-    def __init__(self,parent=None):
-        gobject.GObject.__init__(self)
-        self.set_border_width(5)
-        self.set_transient_for(parent)
-        self.set_position(gtk.WIN_POS_CENTER_ON_PARENT)
-        self.connect('delete-event',self.on_delete_event)
-
-        vbox=gtk.VBox()
+    def __init__(self):
+        gtk.VBox.__init__(self)
+        
         for txt in ('Per colorare una parola selezionarla e cliccare su un colore',
                     'Le seguenti parole chiave verranno espanse nelle relative informazioni\n'):
             labelHelp=gtk.Label(txt)
@@ -193,47 +186,50 @@ class HelpWindow(gtk.Window):
             align=gtk.Alignment(0,0,0,0.5)
             align.add(labelHelp)
             align.show()
-            vbox.pack_start(align)
+            self.pack_start(align)
         
         tableHelp=gtk.Table(len(helpDict),2)
         tableHelp.set_col_spacings(6)
         keys=commands.keys()
         keys.sort()
-        for row,key in enumerate(keys):
-            for col in (0,1):
-                if col==0:
-                    e=gtk.EventBox()
-                    e.add_events(gtk.gdk.BUTTON_PRESS_MASK)
-                    label=gtk.Label()
-                    label.set_markup('<span foreground="blue"><u>%s</u></span>' % key)
-                    label.show()
-                    e.add(label)
-                    e.text=key
-                    e.connect('button-press-event',lambda x,y: self.emit('shortcut-clicked',x.text))
-                    e.show()
-                    label=e #loschissima solo per risparmiare spazio
-                else:
-                    label=gtk.Label(helpDict[key])
-                    label.show()
+        
+        row=0
+        len_keys=len(keys)
+        key_idx=0
+        while key_idx < len_keys:
+            for col in (0,1,2):
+                key_idx=row*3+col
+                if key_idx >= len_keys : break
+                keyword=keys[key_idx]
                 
-                align=gtk.Alignment(0,0,0,0.5)
-                align.add(label)
-                align.show()
-                tableHelp.attach(align,col,col+1,row,row+1)
+                e=gtk.EventBox()
+                e.add_events(gtk.gdk.BUTTON_PRESS_MASK)
+                label=gtk.Label()
+                label.set_markup('<span foreground="blue"><u>%s</u></span>' % keyword)
+                label.set_tooltip_text(helpDict[keyword])
+                label.show()
+                e.add(label)
+                e.text=keyword
+                e.connect('button-press-event',lambda x,y: self.emit('keyword-clicked',x.text))
+                e.connect('enter-notify-event',self.on_keyword_enter)
+                e.connect('leave-notify-event',self.on_keyword_leave)
+                e.show()
                 
+                tableHelp.attach(e,col,col+1,row,row+1)
+            
+            row+=1
+        
         tableHelp.show()
-        vbox.pack_start(tableHelp)
-        vbox.show()
-        self.add(vbox)
+        self.pack_start(tableHelp)
+    
+    def on_keyword_enter(self,widget,ev):
+        widget.window.set_cursor(gtk.gdk.Cursor(gtk.gdk.HAND2))
+    
+    def on_keyword_leave(self,widget,ev):
+        widget.window.set_cursor(gtk.gdk.Cursor(gtk.gdk.ARROW))
+    
 
-    def run(self):
-        self.show()
-        gtk.main()
-
-    def on_delete_event(self,*args):
-        self.hide()
-        return True
-gobject.type_register(HelpWindow)
+gobject.type_register(KeywordsBox)
 
 class Window(gtk.Window):
     def __init__(self):
@@ -244,11 +240,11 @@ class Window(gtk.Window):
         self.connect('delete-event',self.on_delete_event)
 
         vbox=gtk.VBox()
-
-        helpBtn=gtk.Button('Help')
-        helpBtn.connect('clicked',self.on_helpBtn_clicked)
-        helpBtn.show()
-        vbox.pack_start(helpBtn,0,0,3)
+        
+        keywordsBox=KeywordsBox()
+        keywordsBox.connect('keyword-clicked',self.on_shortcut_clicked)
+        keywordsBox.show()
+        vbox.pack_start(keywordsBox,0,0,3)
 
         colorBox=ColorBox()
         colorBox.connect('color-selected',self.on_table_color_selected)
@@ -273,17 +269,9 @@ class Window(gtk.Window):
 
         self.show()
     
+    
     def on_shortcut_clicked(self,widget,key):
-            self.textview.buffer.insert_at_cursor(key)
-
-    def on_helpBtn_clicked(self,*args):
-        try:
-            self.helpWin.show()
-        except AttributeError:
-            self.helpWin=HelpWindow(parent=self)
-            self.helpWin.connect('shortcut-clicked',self.on_shortcut_clicked)
-            self.helpWin.run()
-            gtk.main_quit()
+        self.textview.buffer.insert_at_cursor(key)
     
     def convert_to_bash(self,*args):
         buffer=self.textview.buffer
