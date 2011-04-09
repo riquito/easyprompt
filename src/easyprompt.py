@@ -348,29 +348,40 @@ class Window(gtk.Window):
                 self.textview.modify_base(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(colors[colorName])))
             else:
                 self.textview.modify_text(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(colors[colorName])))
-            #self.textview.modify_bg(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(colors[colorName])))
-            return
+        else:
+            self.apply_tag_to_template(self.textview,colorName)
+        
+    
+    def apply_tag_to_template(self,textview,tagName):
         
         buffer=self.textview.buffer
+        settingBgColor=tagName.startswith('bg_')
+        
         try:
-            start,end=buffer.get_selection_bounds()
-            iter1=start.copy()
-            isbackground=colorName.startswith('bg_')
-            while 1:
-                for tag in iter1.get_tags():
-                    iter2=iter1.copy()
-                    iter2.forward_char()
-                    if tag.get_property('name').startswith('bg_') and isbackground:
-                        buffer.remove_tag(tag,iter1,iter2)
-                    elif not (tag.get_property('name').startswith('bg_') or isbackground):
-                        buffer.remove_tag(tag,iter1,iter2)
-                if iter1.get_offset()+1==end.get_offset() or not iter1.forward_char(): break
+            selectionStart,selectionEnd=buffer.get_selection_bounds()
+            iter1=selectionStart.copy()
             
-            buffer.apply_tag_by_name(colorName,start,end)
-            buffer.select_range(end,end)
+            while not iter1.is_end() and iter1.get_offset() < selectionEnd.get_offset():
+                
+                iter2=iter1.copy()
+                iter2.forward_char()
+                
+                for tag in iter1.get_tags():
+                    
+                    isTagBgColor=tag.get_property('name').startswith('bg_')
+                    
+                    if not (isTagBgColor^settingBgColor): # (isTagBgColor and settingBgColor) or (not isTagBgColor and not settingBgColor)):
+                        buffer.remove_tag(tag,iter1,iter2)
+                
+                iter1=iter2
+            
+            
+            buffer.apply_tag_by_name(tagName,selectionStart,selectionEnd)
+            buffer.select_range(selectionEnd,selectionEnd)
+            
         except ValueError: pass #nothing selected
     
-
+    
     def on_delete_event(self,*args):
         gtk.main_quit()
         
