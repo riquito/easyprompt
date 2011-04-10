@@ -154,7 +154,7 @@ class ColorBox(gtk.HBox):
     
 gobject.type_register(ColorBox)
 
-class promptTextView(gtk.TextView):
+class FormatPromptTextView(gtk.TextView):
     def __init__(self,*args):
         gtk.TextView.__init__(self,*args)
         self.modify_font(pango.FontDescription('Courier 14'))
@@ -263,9 +263,15 @@ class Window(gtk.Window):
         btn.show()
         vbox.pack_start(btn,0,0,2)
         
-        self.textview=promptTextView()
+        self.textview=FormatPromptTextView()
         self.textview.show()
-        vbox.pack_start(self.textview,1,1,2)
+        
+        sw = gtk.ScrolledWindow()
+        sw.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+        sw.add(self.textview)
+        sw.show()
+        
+        vbox.pack_start(sw,0,0,2)
         
         codePreviewBox=gtk.HBox()
         label=gtk.Label()
@@ -290,6 +296,8 @@ class Window(gtk.Window):
         
         vbox.show()
         self.add(vbox)
+        
+        self.textview.set_size_request(-1,self.textview.get_line_yrange(self.textview.buffer.get_start_iter())[1]*3)
 
         self.show()
     
@@ -373,7 +381,7 @@ class Window(gtk.Window):
         
         self.textview.buffer.handler_unblock(self.texviewChangedId)
         
-        return line
+        return line.replace("\n","\\n")
     
     def reset_colors(self):
         self.textview.buffer.handler_block(self.texviewChangedId)
