@@ -262,12 +262,22 @@ class Window(gtk.Window):
         self.textview.show()
         vbox.pack_start(self.textview,1,1,2)
         
+        codePreviewBox=gtk.HBox()
+        codePreviewBox.pack_start(gtk.Label("Generated code"),0,0,2)
+        self.codePreview=gtk.Label()
+        codePreviewBox.pack_start(self.codePreview,0,0,2)
+        codePreviewBox.show_all()
+        vbox.pack_start(codePreviewBox,0,0,2)
+        
         self.term=self.create_terminal()
         self.term.show()
         vbox.pack_start(self.term,0,0,2)
         
-        btn=gtk.Button('Preview')
-        btn.connect('clicked',self.convert_to_bash_and_preview)
+        self.texviewChangedId=self.textview.buffer.connect('changed',self.convert_to_bash_and_preview)
+        colorBox.connect('color-selected',self.convert_to_bash_and_preview)
+        
+        btn=gtk.Button('Save')
+        btn.connect('clicked', lambda *x: self.write_on_disk(self.convert_to_bash()))
         btn.show()
         vbox.pack_start(btn,0,0,2)
         
@@ -289,13 +299,21 @@ class Window(gtk.Window):
     def convert_to_bash_and_preview(self,*args):
         converted=self.convert_to_bash()
         self.preview(converted)
+        self.code_preview(converted)
     
     def preview(self,prompt_format):
         self.term.set_prompt(prompt_format)
         self.term.clear()
     
+    def code_preview(self,prompt_format):
+        self.codePreview.set_text(prompt_format)
+    
     def convert_to_bash(self):
+        
+        self.textview.buffer.handler_block(self.texviewChangedId)
+        
         buffer=self.textview.buffer
+        
         iter1=buffer.get_start_iter()
 
         text=[]
@@ -324,18 +342,16 @@ class Window(gtk.Window):
                         last_tags.append(name)
 
             if mustReset:
-                #print 'DENTRO'
                 text.append('\[%s\]' % codes['reset'])
                 for name in last_tags:
                      text.append('\[%s\]' % codes[name])
                 mustReset=False
 
             if not tags and last_tags:
-                #print 'INSIDE'
                 text.append('\[%s\]' % codes['reset'])
                 last_tags=[]
-            text.append(iter1.get_char())
-            #print 'PING'
+            text.append(iter1.get_char().replace('\\','\\\\').replace('"','\\"'))
+            
             if not iter1.forward_char(): break
         if last_tags: text.append('\[%s\]' % codes['reset'])
         
@@ -344,13 +360,14 @@ class Window(gtk.Window):
         for elem in commands: #convert commands in bash equivalent -> BAD use of strings. ro re-write
             line=line.replace(elem,commands[elem])
         
-        #line=line.replace('"','\\"')
-        
         for module in re.findall('plug_(.+\.py)',line):
             line=line.replace('plug_%s' % module,'\\$(python %s/%s)' % (PLUGINS_PATH,module))
         
+        
+        self.textview.buffer.handler_unblock(self.texviewChangedId)
+        
         return line
-
+    
     def write_on_disk(self,line):
         fp=file(os.path.join(CONFIG_PATH,'temp.txt'),'w')
         fp.write(line)
