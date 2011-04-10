@@ -258,6 +258,11 @@ class Window(gtk.Window):
         self.checkBtn.show()
         vbox.pack_start(self.checkBtn,0,0,2)
         
+        btn=gtk.Button('Reset colors')
+        btn.connect('clicked', lambda *x: self.reset_colors())
+        btn.show()
+        vbox.pack_start(btn,0,0,2)
+        
         self.textview=promptTextView()
         self.textview.show()
         vbox.pack_start(self.textview,1,1,2)
@@ -306,7 +311,7 @@ class Window(gtk.Window):
         self.term.clear()
     
     def code_preview(self,prompt_format):
-        self.codePreview.set_text(prompt_format)
+        self.codePreview.set_text(prompt_format.strip(u'\x00'))
     
     def convert_to_bash(self):
         
@@ -367,6 +372,15 @@ class Window(gtk.Window):
         self.textview.buffer.handler_unblock(self.texviewChangedId)
         
         return line
+    
+    def reset_colors(self):
+        self.textview.buffer.handler_block(self.texviewChangedId)
+        self.textview.buffer.set_text(self.textview.buffer.get_text(
+            self.textview.buffer.get_start_iter(),
+            self.textview.buffer.get_end_iter()
+        ))
+        self.textview.buffer.handler_unblock(self.texviewChangedId)
+        self.textview.buffer.emit('changed')
     
     def write_on_disk(self,line):
         fp=file(os.path.join(CONFIG_PATH,'temp.txt'),'w')
