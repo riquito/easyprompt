@@ -268,7 +268,9 @@ class Window(gtk.Window):
         vbox.pack_start(self.textview,1,1,2)
         
         codePreviewBox=gtk.HBox()
-        codePreviewBox.pack_start(gtk.Label("Generated code"),0,0,2)
+        label=gtk.Label()
+        label.set_markup("<b>Generated code</b>");
+        codePreviewBox.pack_start(label,0,0,2)
         self.codePreview=gtk.Label()
         codePreviewBox.pack_start(self.codePreview,0,0,2)
         codePreviewBox.show_all()
