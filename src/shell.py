@@ -48,6 +48,12 @@ class ShellWidget(vte.Terminal):
     
     def loadColors(self,colors):
         self.set_colors(colors["foreground"],colors["background"],colors["palette"])
+    
+    def set_prompt(self,prompt_format):
+        self.feed_child('''export PS1="%s" \n ''' % prompt_format)
+    
+    def clear(self):
+        self.feed_child("clear\n")
 
 if __name__ == '__main__':
   

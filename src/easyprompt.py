@@ -1,11 +1,13 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 __author__='Riccardo Attilio Galli <riccardo@sideralis.org>'
 __organization__='Sideralis'
 __version__='1.1.0'
 
 import gtk,pango,gobject
-import output
+import shell
+import output, re
 from output import codes
 
 output.use4prompt=1
@@ -160,6 +162,7 @@ class promptTextView(gtk.TextView):
         self.modify_base(gtk.STATE_NORMAL,gtk.gdk.color_parse('#000000'))
         self.modify_text(gtk.STATE_NORMAL,gtk.gdk.color_parse('#FFFFFF'))
         self.buffer=self.get_buffer()
+        
         table=self.buffer.get_tag_table()
         
         for name in colors:
@@ -235,7 +238,7 @@ class Window(gtk.Window):
     def __init__(self):
         gtk.Window.__init__(self)
         self.set_position(gtk.WIN_POS_CENTER)
-        self.set_size_request(500,400)
+        self.set_size_request(500,600)
         self.set_border_width(5)
         self.connect('delete-event',self.on_delete_event)
 
@@ -258,9 +261,13 @@ class Window(gtk.Window):
         self.textview=promptTextView()
         self.textview.show()
         vbox.pack_start(self.textview,1,1,2)
-       
-        btn=gtk.Button('Genera')
-        btn.connect('clicked',self.convert_to_bash)
+        
+        self.term=self.create_terminal()
+        self.term.show()
+        vbox.pack_start(self.term,0,0,2)
+        
+        btn=gtk.Button('Preview')
+        btn.connect('clicked',self.convert_to_bash_and_preview)
         btn.show()
         vbox.pack_start(btn,0,0,2)
         
@@ -269,11 +276,25 @@ class Window(gtk.Window):
 
         self.show()
     
+    def create_terminal(self):
+        term=shell.ShellWidget()
+        term=shell.ShellWidget()
+        term.loadColors(shell.getGnomeTerminalColors())
+        term.set_size(term.get_column_count(),10)
+        return term
     
     def on_shortcut_clicked(self,widget,key):
         self.textview.buffer.insert_at_cursor(key)
     
-    def convert_to_bash(self,*args):
+    def convert_to_bash_and_preview(self,*args):
+        converted=self.convert_to_bash()
+        self.preview(converted)
+    
+    def preview(self,prompt_format):
+        self.term.set_prompt(prompt_format)
+        self.term.clear()
+    
+    def convert_to_bash(self):
         buffer=self.textview.buffer
         iter1=buffer.get_start_iter()
 
@@ -318,16 +339,19 @@ class Window(gtk.Window):
             if not iter1.forward_char(): break
         if last_tags: text.append('\[%s\]' % codes['reset'])
         
-        
         #now convert every \x1b char with the octal equivalen \033
         line=''.join(text).replace('\x1b','\\'+str(oct(ord('\x1b'))))
         for elem in commands: #convert commands in bash equivalent -> BAD use of strings. ro re-write
             line=line.replace(elem,commands[elem])
-
-        import re
+        
+        #line=line.replace('"','\\"')
+        
         for module in re.findall('plug_(.+\.py)',line):
             line=line.replace('plug_%s' % module,'\\$(python %s/%s)' % (PLUGINS_PATH,module))
+        
+        return line
 
+    def write_on_disk(self,line):
         fp=file(os.path.join(CONFIG_PATH,'temp.txt'),'w')
         fp.write(line)
         fp.write(' ')
