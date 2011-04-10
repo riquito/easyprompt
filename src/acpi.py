@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: iso-8859-1 -*-
 
-__author__ 	= 'Federico Galli <fede@sideralis.net>'
+__author__ 	= 'Federico Galli <fede@sideralis.org>'
 __version__ = '0.1'
 __date__    = '13-07-04'
 
