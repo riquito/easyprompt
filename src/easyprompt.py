@@ -8,6 +8,7 @@ __version__='1.1.0'
 import gtk,pango,gobject
 import shell
 import output, re
+from math import floor,ceil
 from output import codes
 
 output.use4prompt=1
@@ -31,22 +32,25 @@ gtk.rc_parse_string(\
 
 
 colors={}
-colors['yellow']=(255,255,0)
-colors['blue']=(0,0,255)
-colors['purple']=(204,0,204)
-colors['fucsia']=(255,0,255)
+
 colors['black']=(0,0,0)
-colors['white']=(255,255,255)
-colors['red']=(255,0,0)
-colors['brown']=(204,204,0)
-colors['turquoise']=(0,255,255)
-colors['darkred']=(204,0,0)
-colors['gray']=(170,170,170)
-colors['darkgreen']=(0,204,0)
-colors['darkgray']=(51,51,51)
 colors['darkblue']=(0,0,204)
-colors['green']=(0,255,0)
+colors['darkgreen']=(0,204,0)
 colors['teal']=(0,204,204)
+colors['darkred']=(204,0,0)
+colors['purple']=(204,0,204)
+colors['brown']=(204,204,0)
+colors['gray']=(170,170,170)
+
+'''
+colors['darkgray']=(51,51,51)
+colors['blue']=(0,0,255)
+colors['green']=(0,255,0)
+colors['fucsia']=(255,0,255)
+colors['red']=(255,0,0)
+colors['turquoise']=(0,255,255)
+colors['yellow']=(255,255,0)
+colors['white']=(255,255,255)
 
 colors['bg_black']=colors['black']
 colors['bg_blue']=colors['darkblue']
@@ -56,6 +60,7 @@ colors['bg_red']=colors['darkred']
 colors['bg_purple']=colors['purple']
 colors['bg_brown']=colors['brown']
 colors['bg_gray']=colors['gray']
+'''
 
 commands={
 'dateLong':'$(date +"%d %b %Y")',
@@ -104,55 +109,257 @@ def rgb2hex(colorTuple):
         esa.append(len(ascii)==4 and ascii[-2:] or ('0'+ascii[-1:]))
     return ''.join(esa)
 
-class ColorBox(gtk.HBox):
+class Styling(gtk.VBox):
     __gsignals__ = {
-         'color-selected' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
-                (gobject.TYPE_PYOBJECT,))
+        'changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
+                ()),
     }
-
+    
+    
+    COLORNAMES=['black','darkblue','darkgreen','teal','darkred','purple','brown','gray']
+    
+    class ColorsContainer(gtk.Frame):
+        __gsignals__ = {
+            'color-selected' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
+                    (gobject.TYPE_PYOBJECT,)),
+        }
+        
+        def __init__(self,frameTitle,colorNames,rows=1):
+            gobject.GObject.__init__(self)
+            
+            self.set_label(frameTitle)
+            self.set_border_width(1)
+            
+            colorNames = ['transparent']+colorNames
+            
+            numColors = len(colorNames)
+            
+            columns=int(ceil(numColors/float(rows)))
+            
+            tableColors=gtk.Table(rows=rows,columns=columns,homogeneous=True)
+            tableColors.set_row_spacings(1)
+            tableColors.set_col_spacings(1)
+            
+            group=None
+            
+            self.pixmap = None
+            self.colour = "#FF0000"
+            self.gc = None
+            self.currentColor = None
+            
+            for row in range(rows):
+                for col in range(columns):
+                    
+                    singleColorBox=gtk.VBox()
+                    
+                    colorName=colorNames[col];
+                    
+                    littleFrame=gtk.Frame()
+                    littleFrame.set_border_width(2)
+                    
+                    da=gtk.DrawingArea()
+                    da.set_size_request(20,20)
+                    da.set_events(gtk.gdk.BUTTON_PRESS_MASK)
+                    #da.connect('event',self._on_color_clicked,colorName)
+                    
+                    if colorName == 'transparent':
+                        da.connect("expose_event", self.expose_event)
+                        da.connect("configure_event", self.configure_event)
+                        self.currentColor = None
+                    else:
+                        da.modify_bg(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(colors[colorName])))
+                    
+                    da.show()
+                    
+                    littleFrame.add(da)
+                    littleFrame.show()
+                    
+                    singleColorBox.pack_start(littleFrame,0,0,2)
+                    
+                    radioButton=gtk.RadioButton(group)
+                    if group == None: group = radioButton
+                    radioButton.show()
+                    singleColorBox.pack_start(radioButton,0,0,2)
+                    
+                    singleColorBox.show()
+                    
+                    radioButton.connect('toggled',self._on_color_selected,colorName)
+                    
+                    tableColors.attach(singleColorBox,col,col+1,row,row+1)
+            
+            tableColors.show()
+            
+            self.add(tableColors)
+        
+        def _on_color_selected(self,widget,colorName):
+            if not widget.get_active(): return
+            self.currentColor = None if colorName=='transparent' else colorName
+            self.emit('color-selected', self.currentColor)
+        
+        def get_color(self):
+            return self.currentColor
+        
+        def configure_event(self,widget, event):
+            x, y, width, height = widget.get_allocation()
+            self.pixmap = gtk.gdk.Pixmap(widget.window, width, height)
+            white_gc = widget.get_style().white_gc
+            self.pixmap.draw_rectangle(white_gc, True, 0, 0, width, height)
+            return True
+        
+        def expose_event(self,widget, event):
+            if not self.pixmap: return False
+            
+            x , y, w, h = event.area
+            drawable_gc = widget.get_style().fg_gc[gtk.STATE_NORMAL]
+            widget.window.draw_drawable(drawable_gc, self.pixmap, x, y, x, y, w, h)
+            
+            square_sz=20
+            
+            if not self.gc:
+                self.gc = widget.window.new_gc()
+                self.gc.set_rgb_fg_color(gtk.gdk.color_parse('red'))
+            
+            self.pixmap.draw_line(self.gc, 0,square_sz,square_sz,0)
+            widget.queue_draw_area(0, 0, square_sz, square_sz)
+                
+            return False
+    
+    gobject.type_register(ColorsContainer)
+    
+    class StylesContainer(gtk.Frame):
+        __gsignals__ = {
+            'style-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
+                    ()),
+        }
+        
+        def __init__(self):
+            gobject.GObject.__init__(self)
+            
+            self.set_label('Styles')
+            self.set_border_width(1)
+            
+            rows=3
+            columns=2
+            
+            tableStyles=gtk.Table(rows=rows,columns=columns,homogeneous=True)
+            tableStyles.set_row_spacings(1)
+            tableStyles.set_col_spacings(1)
+            
+            self.underlineBtn=gtk.CheckButton('underline')
+            self.strikethroughBtn=gtk.CheckButton('strikethrough')
+            
+            self.normalRadio=gtk.RadioButton(None,'normal')
+            self.boldRadio=gtk.RadioButton(self.normalRadio,'bold')
+            self.faintRadio=gtk.RadioButton(self.normalRadio,'faint')
+            
+            for widget in (self.underlineBtn,
+                      self.strikethroughBtn,
+                      self.normalRadio,
+                      self.boldRadio,
+                      self.faintRadio
+                      ):
+                widget.connect('toggled', lambda w: self.emit('style-changed'))
+                widget.show()
+            
+            
+            tableStyles.attach(self.normalRadio,0,1,0,1)
+            tableStyles.attach(self.boldRadio,0,1,1,2)
+            tableStyles.attach(self.faintRadio,0,1,2,3)
+            
+            tableStyles.attach(self.underlineBtn,1,2,0,1)
+            tableStyles.attach(self.strikethroughBtn,1,2,1,2)
+            
+            tableStyles.show()
+            
+            self.add(tableStyles)
+        
+        def get_styles(self):
+            
+            weight='normal'
+            if self.boldRadio.get_active():
+                weight='bold'
+            elif self.faintRadio.get_active():
+                weight='faint'
+            
+            return {
+                'weight' : weight,
+                'underline' : self.underlineBtn.get_active(),
+                'strikethrough' : self.strikethroughBtn.get_active()
+            }
+    
+    gobject.type_register(StylesContainer)
     
     def __init__(self,*args):
         gobject.GObject.__init__(self)
         
-        for title in ('caratteri','sfondo'):
-            frame=gtk.Frame(title)
-            frame.set_border_width(1)
-            table=gtk.Table(rows=2,columns=8,homogeneous=True)
-            table.set_row_spacings(1)
-            table.set_col_spacings(1)
-            
-            if title=='sfondo':
-                colorNames=['bg_black', 'bg_blue','bg_red', 'bg_purple', 'bg_green', 'bg_brown', 'bg_teal', 'bg_gray']
-            else:
-                colorNames=[
-                    'black', 'darkblue','darkred', 'purple', 'green', 'brown', 'teal', 'gray',
-                    'darkgray','blue','red','fucsia','green','yellow','turquoise', 'white'
-                ]
-            
-            for row in (0,1):
-                for column,name in enumerate(colorNames[row*8:(row*8+8)]):
-                    littleframe=gtk.Frame()
-                    littleframe.set_border_width(2)
-                    da=gtk.DrawingArea()
-                    da.set_size_request(20,20)
-                    da.modify_bg(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(colors[name])))
-                    da.set_events(gtk.gdk.BUTTON_PRESS_MASK)
-                    da.connect('event',self.on_color_clicked,name)
-                    da.show()
-                    littleframe.add(da)
-                    littleframe.show()
-                    table.attach(littleframe,column,column+1,row,row+1)
+        mainFrame=gtk.Frame('Options')
+        mainFrame.set_border_width(1)
+        
+        vbox=gtk.VBox()
+        
+        
+        ### COMBOBOX Foreground/Background ###
+        '''
+        liststore = gtk.ListStore(gobject.TYPE_STRING,gobject.TYPE_INT)
+        for key in (("Foreground",0),("Background",1)):
+            liststore.append(key)
+        combobox = gtk.ComboBox(liststore)
+        cell = gtk.CellRendererText()
+        combobox.pack_start(cell, True)
+        combobox.add_attribute(cell, 'text', 0)
+        
+        combobox.show()
+        vbox.pack_start(combobox,0,0,10)
+        '''
+        
+        ### END COMBOBOX ###
+        
+        boxColorsAndStyle=gtk.VBox()
+        
+        ### COLORS ###
+        
+        self.frameBgColors=self.ColorsContainer('Background color',self.COLORNAMES)
+        self.frameBgColors.connect('color-selected', lambda *args: self.emit('changed'))
+        self.frameBgColors.show()
+        
+        self.frameFgColors=self.ColorsContainer('Foreground color',self.COLORNAMES)
+        self.frameFgColors.connect('color-selected', lambda *args: self.emit('changed'))
+        self.frameFgColors.show()
+        
+        
+        ### END colors ###
+        
+        boxColorsAndStyle.pack_start(self.frameBgColors,0,0,2)
+        boxColorsAndStyle.pack_start(self.frameFgColors,0,0,2)
+        
+        ### TABLE STYLES ###
+        self.frameStyles=self.StylesContainer()
+        self.frameStyles.connect('style-changed', lambda *args: self.emit('changed'))
+        self.frameStyles.show()
+        
+        ### END TABLE STYLES ###
+        
+        boxColorsAndStyle.pack_start(self.frameStyles,0,0,2)
+        
+        boxColorsAndStyle.show()
+        vbox.pack_start(boxColorsAndStyle,0,0,10)
+        
+        vbox.show()
+        mainFrame.add(vbox)
+        
+        mainFrame.show()
+        self.pack_start(mainFrame,1,1,0)
+        
+    def get_styling(self):
+        return {
+            'bgColor' : self.frameBgColors.get_color(),
+            'fgColor' : self.frameFgColors.get_color(),
+            'styles' : self.frameStyles.get_styles()
+        }
+        
 
-            table.show()
-            frame.add(table)
-            frame.show()
-            self.pack_start(frame,0,0,3)
+gobject.type_register(Styling)
 
-    def on_color_clicked(self,drawingArea,event,colorName):
-        if event.type!=gtk.gdk.BUTTON_PRESS: return
-        self.emit('color-selected',colorName)
-    
-gobject.type_register(ColorBox)
 
 class FormatPromptTextView(gtk.TextView):
     def __init__(self,*args):
@@ -244,15 +451,20 @@ class Window(gtk.Window):
 
         vbox=gtk.VBox()
         
+        topHBox=gtk.HBox()
+        
+        stylingBox=Styling()
+        stylingBox.connect('changed',self.on_style_changed)
+        stylingBox.show()
+        topHBox.pack_start(stylingBox,0,0,2)
+        
         keywordsBox=KeywordsBox()
         keywordsBox.connect('keyword-clicked',self.on_shortcut_clicked)
         keywordsBox.show()
-        vbox.pack_start(keywordsBox,0,0,3)
-
-        colorBox=ColorBox()
-        colorBox.connect('color-selected',self.on_table_color_selected)
-        colorBox.show()
-        vbox.pack_start(colorBox,0,0,2)
+        topHBox.pack_start(keywordsBox,0,0,3)
+        
+        topHBox.show()
+        vbox.pack_start(topHBox,0,0,2)
         
         self.checkBtn=gtk.CheckButton('usa i colori per modificare sfondo e colore del testo di EasyPrompt')
         self.checkBtn.show()
@@ -287,7 +499,7 @@ class Window(gtk.Window):
         vbox.pack_start(self.term,0,0,2)
         
         self.texviewChangedId=self.textview.buffer.connect('changed',self.convert_to_bash_and_preview)
-        colorBox.connect('color-selected',self.convert_to_bash_and_preview)
+        #colorBox.connect('color-selected',self.convert_to_bash_and_preview)
         
         btn=gtk.Button('Save')
         btn.connect('clicked', lambda *x: self.write_on_disk(self.convert_to_bash()))
@@ -372,6 +584,7 @@ class Window(gtk.Window):
         
         #now convert every \x1b char with the octal equivalen \033
         line=''.join(text).replace('\x1b','\\'+str(oct(ord('\x1b'))))
+        
         for elem in commands: #convert commands in bash equivalent -> BAD use of strings. ro re-write
             line=line.replace(elem,commands[elem])
         
@@ -415,12 +628,15 @@ class Window(gtk.Window):
                 self.textview.modify_text(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(colors[colorName])))
         else:
             self.apply_tag_to_template(self.textview,colorName)
-        
+    
+    def on_style_changed(self,stylingObj):
+        print stylingObj.get_styling()
     
     def apply_tag_to_template(self,textview,tagName):
         
         buffer=self.textview.buffer
-        settingBgColor=tagName.startswith('bg_')
+        #settingBgColor=tagName.startswith('bg_')
+        settingBgColor=True
         
         try:
             selectionStart,selectionEnd=buffer.get_selection_bounds()
@@ -433,7 +649,8 @@ class Window(gtk.Window):
                 
                 for tag in iter1.get_tags():
                     
-                    isTagBgColor=tag.get_property('name').startswith('bg_')
+                    #isTagBgColor=tag.get_property('name').startswith('bg_')
+                    isTagBgColor=True
                     
                     if not (isTagBgColor^settingBgColor): # (isTagBgColor and settingBgColor) or (not isTagBgColor and not settingBgColor)):
                         buffer.remove_tag(tag,iter1,iter2)
