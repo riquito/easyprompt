@@ -247,13 +247,16 @@ class Styling(gtk.VBox):
             
             self.underlineBtn=gtk.CheckButton('underline')
             self.strikethroughBtn=gtk.CheckButton('strikethrough')
+            self.invertBtn=gtk.CheckButton('invert')
             
             self.normalRadio=gtk.RadioButton(None,'normal')
             self.boldRadio=gtk.RadioButton(self.normalRadio,'bold')
             self.faintRadio=gtk.RadioButton(self.normalRadio,'faint')
             
-            for widget in (self.underlineBtn,
+            for widget in (
+                      self.underlineBtn,
                       self.strikethroughBtn,
+                      self.invertBtn,
                       self.normalRadio,
                       self.boldRadio,
                       self.faintRadio
@@ -268,6 +271,7 @@ class Styling(gtk.VBox):
             
             tableStyles.attach(self.underlineBtn,1,2,0,1)
             tableStyles.attach(self.strikethroughBtn,1,2,1,2)
+            tableStyles.attach(self.invertBtn,1,2,2,3)
             
             tableStyles.show()
             
@@ -284,7 +288,8 @@ class Styling(gtk.VBox):
             return {
                 'weight' : weight,
                 'underline' : self.underlineBtn.get_active(),
-                'strikethrough' : self.strikethroughBtn.get_active()
+                'strikethrough' : self.strikethroughBtn.get_active(),
+                'invert' : self.invertBtn.get_active()
             }
     
     gobject.type_register(StylesContainer)
@@ -356,10 +361,24 @@ class Styling(gtk.VBox):
             'fgColor' : self.frameFgColors.get_color(),
             'styles' : self.frameStyles.get_styles()
         }
-        
+    
+    def __str__(self):
+        return self.__unicode__().encode('utf-8')
+    
+    def __unicode__(self):
+        return repr(self.get_styling()).decode('utf-8')
 
 gobject.type_register(Styling)
 
+class PromptToken:
+    def __init__(self):
+        self.text=None
+        self.styling=None
+
+class PromptKeywordToken(PromptToken):
+    def __init__(self):
+        super(PromptKeywordToken,self).__init__()
+        
 
 class FormatPromptTextView(gtk.TextView):
     def __init__(self,*args):
@@ -372,13 +391,38 @@ class FormatPromptTextView(gtk.TextView):
         
         table=self.buffer.get_tag_table()
         
-        for name in colors:
-            tag=gtk.TextTag(name)
-            if name.startswith('bg_'):
-                tag.set_property('background',rgb2hex(colors[name]))
-            else:
-                tag.set_property('foreground',rgb2hex(colors[name]))
+        for colorName in Styling.COLORNAMES:
+            
+            hexCode=rgb2hex(colors[colorName])
+            
+            tag=gtk.TextTag('bg_'+colorName)
+            tag.set_property('background',hexCode)
             table.add(tag)
+            
+            tag=gtk.TextTag('fg_'+colorName)
+            tag.set_property('foreground',hexCode)
+            table.add(tag)
+        
+        for weight in (
+                ('faint',pango.WEIGHT_ULTRALIGHT),
+                ('normal',pango.WEIGHT_NORMAL),
+                ('bold',pango.WEIGHT_BOLD)
+                 ):
+            tag=gtk.TextTag('weight_'+weight[0])
+            tag.set_property('weight',weight[1])
+            table.add(tag)
+        
+        tag=gtk.TextTag('underline')
+        tag.set_property('underline',True)
+        table.add(tag)
+            
+        tag=gtk.TextTag('strikethrough')
+        tag.set_property('strikethrough',True)
+        table.add(tag)
+            
+        tag=gtk.TextTag('invert')
+        table.add(tag)
+    
 
 class KeywordsBox(gtk.VBox):
     __gsignals__ = {
@@ -630,39 +674,38 @@ class Window(gtk.Window):
             self.apply_tag_to_template(self.textview,colorName)
     
     def on_style_changed(self,stylingObj):
-        print stylingObj.get_styling()
+        self.apply_style_to_template(self.textview,stylingObj)
     
-    def apply_tag_to_template(self,textview,tagName):
-        
-        buffer=self.textview.buffer
-        #settingBgColor=tagName.startswith('bg_')
-        settingBgColor=True
+    def apply_style_to_template(self,textview,stylingObj):
+        buffer=textview.buffer
+        tagTable=buffer.get_tag_table()
+        styling=stylingObj.get_styling()
         
         try:
             selectionStart,selectionEnd=buffer.get_selection_bounds()
-            iter1=selectionStart.copy()
             
-            while not iter1.is_end() and iter1.get_offset() < selectionEnd.get_offset():
-                
-                iter2=iter1.copy()
-                iter2.forward_char()
-                
-                for tag in iter1.get_tags():
-                    
-                    #isTagBgColor=tag.get_property('name').startswith('bg_')
-                    isTagBgColor=True
-                    
-                    if not (isTagBgColor^settingBgColor): # (isTagBgColor and settingBgColor) or (not isTagBgColor and not settingBgColor)):
-                        buffer.remove_tag(tag,iter1,iter2)
-                
-                iter1=iter2
+            buffer.remove_all_tags(selectionStart,selectionEnd)
             
+            to_apply=[]
             
-            buffer.apply_tag_by_name(tagName,selectionStart,selectionEnd)
-            buffer.select_range(selectionEnd,selectionEnd)
+            if styling['styles']['invert']:
+                to_apply.append('invert')
+                styling['bgColor'],styling['fgColor']=styling['fgColor'],styling['bgColor']
+            
+            if styling['bgColor']: to_apply.append("bg_"+styling['bgColor'])
+            
+            if styling['fgColor']: to_apply.append("fg_"+styling['fgColor'])
+            
+            if styling['styles']['strikethrough']: to_apply.append('strikethrough')
+            
+            if styling['styles']['underline']: to_apply.append('underline')
+            
+            if styling['styles']['weight']: to_apply.append('weight_'+styling['styles']['weight'])
+            
+            for tagName in to_apply:
+                buffer.apply_tag_by_name(tagName,selectionStart,selectionEnd)
             
         except ValueError: pass #nothing selected
-    
     
     def on_delete_event(self,*args):
         gtk.main_quit()
