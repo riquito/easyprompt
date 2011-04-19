@@ -42,25 +42,6 @@ colors['purple']=(204,0,204)
 colors['brown']=(204,204,0)
 colors['gray']=(170,170,170)
 
-'''
-colors['darkgray']=(51,51,51)
-colors['blue']=(0,0,255)
-colors['green']=(0,255,0)
-colors['fucsia']=(255,0,255)
-colors['red']=(255,0,0)
-colors['turquoise']=(0,255,255)
-colors['yellow']=(255,255,0)
-colors['white']=(255,255,255)
-
-colors['bg_black']=colors['black']
-colors['bg_blue']=colors['darkblue']
-colors['bg_green']=colors['darkgreen']
-colors['bg_teal']=colors['teal']
-colors['bg_red']=colors['darkred']
-colors['bg_purple']=colors['purple']
-colors['bg_brown']=colors['brown']
-colors['bg_gray']=colors['gray']
-'''
 
 commands={
 'dateLong':'$(date +"%d %b %Y")',
@@ -102,6 +83,89 @@ helpDict={
 'backslash':'un backslash \\',
 }
 
+KEYWORDS={
+    'dateLong': {
+        'command':'$(date +"%d %b %Y")',
+        'help':'',
+        'example':''
+    },
+    'dateShort': {
+        'command':'$(date +"%d/%m/%y")',
+        'help':'',
+        'example':''
+    },
+    'hourLong': {
+        'command':'$(date +"%H:%M:%S")',
+        'help':'',
+        'example':''
+    },
+    'hourShort': {
+        'command':'$(date +"%H:%M")',
+        'help':'',
+        'example':''
+    },
+    'host': {
+        'command':'\h',
+        'help':'',
+        'example':''
+    },
+    'user': {
+        'command':'\u',
+        'help':'bla bla bla bla bla',
+        'example':'<u>foo</u>@mypc /var/log'
+    },
+    'newline': {
+        'command':'\n',
+        'help':'',
+        'example':''
+    },
+    'shell': {
+        'command':'\s',
+        'help':'',
+        'example':''
+    },
+    'version': {
+        'command':'\v',
+        'help':'',
+        'example':''
+    },
+    'release': {
+        'command':'\V',
+        'help':'',
+        'example':''
+    },
+    'abs_pwd': {
+        'command':'\w',
+        'help':'',
+        'example':''
+    },
+    'base_pwd': {
+        'command':'\W',
+        'help':'',
+        'example':''
+    },
+    'history_num': {
+        'command':'\!',
+        'help':'',
+        'example':''
+    },
+    'cmd_num': {
+        'command':'\#',
+        'help':'',
+        'example':''
+    },
+    'prompt': {
+        'command':'\$',
+        'help':'',
+        'example':''
+    },
+    'backslash': {
+        'command':'\\',
+        'help':'',
+        'example':''
+    },
+}
+
 def rgb2hex(colorTuple):
     esa=['#']
     for col in colorTuple:
@@ -113,8 +177,11 @@ class Styling(gtk.VBox):
     __gsignals__ = {
         'changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
                 ()),
+        'keyword-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
+                (gobject.TYPE_STRING,)),
     }
     
+    _memory={}
     
     COLORNAMES=['black','darkblue','darkgreen','teal','darkred','purple','brown','gray']
     
@@ -123,6 +190,52 @@ class Styling(gtk.VBox):
             'color-selected' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
                     (gobject.TYPE_PYOBJECT,)),
         }
+        
+        class ColorPreview(gtk.DrawingArea):
+
+            # Draw in response to an expose-event
+            __gsignals__ = { "expose-event": "override" }
+            
+            def __init__(self,colorTuple=None):
+                super(Styling.ColorsContainer.ColorPreview,self).__init__()
+                
+                self.set_size_request(20,20)
+                self.color=colorTuple
+                
+                if colorTuple:
+                    self.draw=self._paint_color
+                else:
+                    self.draw=self._paint_transparent
+        
+            # Handle the expose-event by drawing
+            def do_expose_event(self, event):
+                # Create the cairo context
+                cr = self.window.cairo_create()
+        
+                # Restrict Cairo to the exposed area; avoid extra work
+                cr.rectangle(event.area.x, event.area.y,
+                        event.area.width, event.area.height)
+                cr.clip()
+        
+                self.draw(cr, *self.window.get_size())
+        
+            def _paint_transparent(self, cr, width, height):
+                # Fill the background with white
+                cr.set_source_rgb(1, 1, 1)
+                cr.rectangle(0, 0, width, height)
+                cr.fill()
+                
+                # a red line bottom left => top right
+                cr.set_source_rgb(1.0, 0.0, 0.0)
+                cr.move_to(0, height)
+                cr.line_to(width,0)
+                cr.stroke()
+            
+            def _paint_color(self, cr, width, height):
+                # Fill the background with white
+                cr.set_source_rgb(*self.color)
+                cr.rectangle(0, 0, width, height)
+                cr.fill()
         
         def __init__(self,frameTitle,colorNames,rows=1):
             gobject.GObject.__init__(self)
@@ -157,21 +270,14 @@ class Styling(gtk.VBox):
                     littleFrame=gtk.Frame()
                     littleFrame.set_border_width(2)
                     
-                    da=gtk.DrawingArea()
-                    da.set_size_request(20,20)
-                    da.set_events(gtk.gdk.BUTTON_PRESS_MASK)
-                    #da.connect('event',self._on_color_clicked,colorName)
-                    
                     if colorName == 'transparent':
-                        da.connect("expose_event", self.expose_event)
-                        da.connect("configure_event", self.configure_event)
-                        self.currentColor = None
+                        singleColorPreview=Styling.ColorsContainer.ColorPreview(None)
                     else:
-                        da.modify_bg(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(colors[colorName])))
+                        singleColorPreview=Styling.ColorsContainer.ColorPreview(colors[colorName])
                     
-                    da.show()
+                    singleColorPreview.show()
                     
-                    littleFrame.add(da)
+                    littleFrame.add(singleColorPreview)
                     littleFrame.show()
                     
                     singleColorBox.pack_start(littleFrame,0,0,2)
@@ -198,31 +304,6 @@ class Styling(gtk.VBox):
         
         def get_color(self):
             return self.currentColor
-        
-        def configure_event(self,widget, event):
-            x, y, width, height = widget.get_allocation()
-            self.pixmap = gtk.gdk.Pixmap(widget.window, width, height)
-            white_gc = widget.get_style().white_gc
-            self.pixmap.draw_rectangle(white_gc, True, 0, 0, width, height)
-            return True
-        
-        def expose_event(self,widget, event):
-            if not self.pixmap: return False
-            
-            x , y, w, h = event.area
-            drawable_gc = widget.get_style().fg_gc[gtk.STATE_NORMAL]
-            widget.window.draw_drawable(drawable_gc, self.pixmap, x, y, x, y, w, h)
-            
-            square_sz=20
-            
-            if not self.gc:
-                self.gc = widget.window.new_gc()
-                self.gc.set_rgb_fg_color(gtk.gdk.color_parse('red'))
-            
-            self.pixmap.draw_line(self.gc, 0,square_sz,square_sz,0)
-            widget.queue_draw_area(0, 0, square_sz, square_sz)
-                
-            return False
     
     gobject.type_register(ColorsContainer)
     
@@ -302,44 +383,33 @@ class Styling(gtk.VBox):
         
         vbox=gtk.VBox()
         
-        
-        ### COMBOBOX Foreground/Background ###
-        '''
-        liststore = gtk.ListStore(gobject.TYPE_STRING,gobject.TYPE_INT)
-        for key in (("Foreground",0),("Background",1)):
-            liststore.append(key)
-        combobox = gtk.ComboBox(liststore)
-        cell = gtk.CellRendererText()
-        combobox.pack_start(cell, True)
-        combobox.add_attribute(cell, 'text', 0)
-        
-        combobox.show()
-        vbox.pack_start(combobox,0,0,10)
-        '''
-        
-        ### END COMBOBOX ###
-        
         boxColorsAndStyle=gtk.VBox()
+        
+        self.keywordsBox=KeywordsBox()
+        self.keywordsBox.connect('keyword-changed',self._on_keyword_changed)
+        self.keywordsBox.show()
+        boxColorsAndStyle.pack_start(self.keywordsBox,0,0,3)
         
         ### COLORS ###
         
-        self.frameBgColors=self.ColorsContainer('Background color',self.COLORNAMES)
-        self.frameBgColors.connect('color-selected', lambda *args: self.emit('changed'))
+        self.frameBgColors=Styling.ColorsContainer('Background color',self.COLORNAMES)
+        self.frameBgColors.connect('color-selected', lambda *args: self._on_style_changed())
         self.frameBgColors.show()
         
-        self.frameFgColors=self.ColorsContainer('Foreground color',self.COLORNAMES)
-        self.frameFgColors.connect('color-selected', lambda *args: self.emit('changed'))
+        self.frameFgColors=Styling.ColorsContainer('Foreground color',self.COLORNAMES)
+        self.frameFgColors.connect('color-selected', lambda *args: self._on_style_changed())
         self.frameFgColors.show()
-        
         
         ### END colors ###
         
         boxColorsAndStyle.pack_start(self.frameBgColors,0,0,2)
         boxColorsAndStyle.pack_start(self.frameFgColors,0,0,2)
         
+        
         ### TABLE STYLES ###
-        self.frameStyles=self.StylesContainer()
-        self.frameStyles.connect('style-changed', lambda *args: self.emit('changed'))
+        
+        self.frameStyles=Styling.StylesContainer()
+        self.frameStyles.connect('style-changed', lambda *args: self._on_style_changed())
         self.frameStyles.show()
         
         ### END TABLE STYLES ###
@@ -355,12 +425,30 @@ class Styling(gtk.VBox):
         mainFrame.show()
         self.pack_start(mainFrame,1,1,0)
         
-    def get_styling(self):
+        from copy import deepcopy
+        baseStyle=self._export_current_style()
+        for keywordName in KEYWORDS:
+            Styling._memory[keywordName]=deepcopy(baseStyle)
+        
+        self.keywordsBox.set_active(0)
+    
+    def _export_current_style(self):
         return {
             'bgColor' : self.frameBgColors.get_color(),
             'fgColor' : self.frameFgColors.get_color(),
             'styles' : self.frameStyles.get_styles()
         }
+    
+    def _on_style_changed(self):
+        Styling._memory[self.keywordsBox.get_active()]=self._export_current_style()
+        self.emit('changed')
+    
+    def get_styling(self):
+        return Styling._memory[self.keywordsBox.get_active()]
+    
+    def _on_keyword_changed(self,widget,key):
+        self.emit('keyword-changed',key)
+    
     
     def __str__(self):
         return self.__unicode__().encode('utf-8')
@@ -426,7 +514,7 @@ class FormatPromptTextView(gtk.TextView):
 
 class KeywordsBox(gtk.VBox):
     __gsignals__ = {
-        'keyword-clicked' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
+        'keyword-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
                 (gobject.TYPE_PYOBJECT,))
     }
     
@@ -441,47 +529,61 @@ class KeywordsBox(gtk.VBox):
             align.add(labelHelp)
             align.show()
             self.pack_start(align)
-        
-        tableHelp=gtk.Table(len(helpDict),2)
-        tableHelp.set_col_spacings(6)
-        keys=commands.keys()
-        keys.sort()
-        
-        row=0
-        len_keys=len(keys)
-        key_idx=0
-        while key_idx < len_keys:
-            for col in (0,1,2):
-                key_idx=row*3+col
-                if key_idx >= len_keys : break
-                keyword=keys[key_idx]
-                
-                e=gtk.EventBox()
-                e.add_events(gtk.gdk.BUTTON_PRESS_MASK)
-                label=gtk.Label()
-                label.set_markup('<span foreground="blue"><u>%s</u></span>' % keyword)
-                label.set_tooltip_text(helpDict[keyword])
-                label.show()
-                e.add(label)
-                e.text=keyword
-                e.connect('button-press-event',lambda x,y: self.emit('keyword-clicked',x.text))
-                e.connect('enter-notify-event',self.on_keyword_enter)
-                e.connect('leave-notify-event',self.on_keyword_leave)
-                e.show()
-                
-                tableHelp.attach(e,col,col+1,row,row+1)
             
-            row+=1
         
-        tableHelp.show()
-        self.pack_start(tableHelp)
+        mainBox=gtk.HBox()
+        
+        liststore = gtk.ListStore(gobject.TYPE_STRING)
+        for key in KEYWORDS:
+            liststore.append((key,))
+        combobox = gtk.ComboBox(liststore)
+        cell = gtk.CellRendererText()
+        combobox.pack_start(cell, True)
+        combobox.add_attribute(cell, 'text', 0)
+        combobox.set_wrap_width(2)
+        
+        combobox.connect('changed',self._on_combobox_changed)
+        
+        self.combobox=combobox
+        
+        combobox.show()
+        
+        mainBox.pack_start(combobox,0,0,2)
+        helpBox=gtk.VBox()
+        
+        
+        self.exampleLabel=gtk.Label()
+        #label.set_markup('<span foreground="blue"><u>%s</u></span>' % keyword)
+        #label.set_tooltip_text(helpDict[keyword])
+        self.exampleLabel.show()
+        
+        helpBox.pack_start(self.exampleLabel)
+        
+        self.descLabel=gtk.Label()
+        self.descLabel.show()
+        helpBox.pack_start(self.descLabel)
+        
+        
+        helpBox.show()
+        mainBox.pack_start(helpBox,0,0,2)
+        
+        mainBox.show()
+        self.pack_start(mainBox)
     
-    def on_keyword_enter(self,widget,ev):
-        widget.window.set_cursor(gtk.gdk.Cursor(gtk.gdk.HAND2))
+    def _on_combobox_changed(self,combobox):
+        keywordName=self.get_active()
+        keywordData=KEYWORDS[keywordName]
+        self.exampleLabel.set_markup(keywordData['example'])
+        self.descLabel.set_markup(keywordData['help'])
+        self.emit('keyword-changed',keywordName)
     
-    def on_keyword_leave(self,widget,ev):
-        widget.window.set_cursor(gtk.gdk.Cursor(gtk.gdk.ARROW))
+    def get_active(self):
+        model = self.combobox.get_model()
+        index = self.combobox.get_active()
+        return model[index][0]
     
+    def set_active(self,index):
+        index = self.combobox.set_active(index)
 
 gobject.type_register(KeywordsBox)
 
@@ -489,26 +591,23 @@ class Window(gtk.Window):
     def __init__(self):
         gtk.Window.__init__(self)
         self.set_position(gtk.WIN_POS_CENTER)
-        self.set_size_request(500,600)
+        self.set_size_request(600,800)
         self.set_border_width(5)
         self.connect('delete-event',self.on_delete_event)
 
         vbox=gtk.VBox()
         
-        topHBox=gtk.HBox()
+        topBox=gtk.VBox()
         
         stylingBox=Styling()
         stylingBox.connect('changed',self.on_style_changed)
+        stylingBox.connect('keyword-changed',self.on_keyword_changed)
         stylingBox.show()
-        topHBox.pack_start(stylingBox,0,0,2)
+        topBox.pack_start(stylingBox,0,0,2)
         
-        keywordsBox=KeywordsBox()
-        keywordsBox.connect('keyword-clicked',self.on_shortcut_clicked)
-        keywordsBox.show()
-        topHBox.pack_start(keywordsBox,0,0,3)
         
-        topHBox.show()
-        vbox.pack_start(topHBox,0,0,2)
+        topBox.show()
+        vbox.pack_start(topBox,0,0,2)
         
         self.checkBtn=gtk.CheckButton('usa i colori per modificare sfondo e colore del testo di EasyPrompt')
         self.checkBtn.show()
@@ -554,18 +653,14 @@ class Window(gtk.Window):
         self.add(vbox)
         
         self.textview.set_size_request(-1,self.textview.get_line_yrange(self.textview.buffer.get_start_iter())[1]*3)
-
+        
         self.show()
     
     def create_terminal(self):
         term=shell.ShellWidget()
-        term=shell.ShellWidget()
         term.loadColors(shell.getGnomeTerminalColors())
         term.set_size(term.get_column_count(),10)
         return term
-    
-    def on_shortcut_clicked(self,widget,key):
-        self.textview.buffer.insert_at_cursor(key)
     
     def convert_to_bash_and_preview(self,*args):
         converted=self.convert_to_bash()
@@ -578,6 +673,9 @@ class Window(gtk.Window):
     
     def code_preview(self,prompt_format):
         self.codePreview.set_text(prompt_format.strip(u'\x00'))
+    
+    def on_keyword_changed(self,widget,key):
+        self.textview.buffer.insert_at_cursor(key)
     
     def convert_to_bash(self):
         
