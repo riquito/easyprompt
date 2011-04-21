@@ -255,10 +255,8 @@ class Styling(gtk.VBox):
             
             group=None
             
-            self.pixmap = None
-            self.colour = "#FF0000"
-            self.gc = None
             self.currentColor = None
+            self.colors2radio={}
             
             for row in range(rows):
                 for col in range(columns):
@@ -289,7 +287,10 @@ class Styling(gtk.VBox):
                     
                     singleColorBox.show()
                     
-                    radioButton.connect('toggled',self._on_color_selected,colorName)
+                    self.colors2radio[colorName]=radioButton
+                    
+                    signal_id=radioButton.connect('toggled', self._on_color_selected,colorName)
+                    radioButton._signal_id=signal_id
                     
                     tableColors.attach(singleColorBox,col,col+1,row,row+1)
             
@@ -304,6 +305,20 @@ class Styling(gtk.VBox):
         
         def get_color(self):
             return self.currentColor
+        
+        def set_color(self,colorName):
+            if colorName == None: colorName = 'transparent'
+            
+            currentRadioBtn=self.colors2radio[self.get_color() if self.get_color() else 'transparent']
+            newRadioBtn=self.colors2radio[colorName]
+            
+            currentRadioBtn.handler_block(currentRadioBtn._signal_id)
+            newRadioBtn.handler_block(newRadioBtn._signal_id)
+            
+            newRadioBtn.set_active(True)
+            
+            currentRadioBtn.handler_unblock(currentRadioBtn._signal_id)
+            newRadioBtn.handler_block(newRadioBtn._signal_id)
     
     gobject.type_register(ColorsContainer)
     
