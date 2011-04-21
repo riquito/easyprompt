@@ -488,6 +488,13 @@ class PromptKeywordToken(PromptToken):
         
 
 class FormatPromptTextView(gtk.TextView):
+    __gsignals__ = {
+        'selection-toggle' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
+                (gobject.TYPE_BOOLEAN,)),
+        'selection-change' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
+                ())
+    }
+    
     def __init__(self,*args):
         gtk.TextView.__init__(self,*args)
         self.modify_font(pango.FontDescription('Courier 14'))
@@ -529,6 +536,32 @@ class FormatPromptTextView(gtk.TextView):
             
         tag=gtk.TextTag('invert')
         table.add(tag)
+        
+        # add selection change capabilities
+        self._has_selection = False
+        self.buffer.connect('notify::has-selection', self.on_selection_toggle)
+        self.connect_after('move-cursor', self.on_move_cursor)
+        self.connect('button-release-event', self._on_mouse_button_released)
+        
+    def _on_mouse_button_released(self,textview,event):
+        self._on_selection_changed()
+        
+    def on_move_cursor(self,textview,step_size,count,extend_selection):
+        if extend_selection:
+            try:
+                start, end = self.buffer.get_selection_bounds()
+                selected_text = self.buffer.get_text(start, end)
+                if len(selected_text) > 0: # when is 0 the 'selection-end' signal is automatically emitted
+                    self._on_selection_changed()
+            except ValueError, e:
+                pass
+    
+    def on_selection_toggle(self,textBuffer,*args):
+        self._has_selection = not self._has_selection
+        self.emit('selection-toggle',self._has_selection)
+    
+    def _on_selection_changed(self):
+        self.emit('selection-change')
     
 
 class KeywordsBox(gtk.VBox):
