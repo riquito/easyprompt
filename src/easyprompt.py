@@ -43,128 +43,89 @@ colors['brown']=(204,204,0)
 colors['gray']=(170,170,170)
 
 
-commands={
-'dateLong':'$(date +"%d %b %Y")',
-'dateShort':'$(date +"%d/%m/%y")',
-'hourLong':'$(date +"%H:%M:%S")',
-'hourShort':'$(date +"%H:%M")',
-'host':'\h',
-#'host_complete':'\H',  #commentato perche' MANGIATO da host 
-'user':'\u',
-'newline':'\n',
-'shell':'\s',
-'version':'\v',
-'release':'\V',
-'abs_pwd':'\w',
-'base_pwd':'\W',
-'history_num':'\!',
-'cmd_num':'\#',
-'prompt':'\$',
-'backslash':'\\',
-}
-
-helpDict={
-'dateLong':'data nel formato %d/%b/%Y es\xb0 28 Feb 2004'.decode('iso-8859-1'),
-'dateShort':'data nel formato %d/%m/%y es\xb0 28/02/04'.decode('iso-8859-1'),
-'hourLong':'ora nel formato %H:%M:%S es\xb0 15:23:59'.decode('iso-8859-1'),
-'hourShort':'ora nel formato %H:%M es\xb0 15:23'.decode('iso-8859-1'),
-'host':'hostname fino al primo punto',
-#'host_cmp':'hostname completo', #commentato perche' MANGIATO da host
-'user':'utente corrente',
-'newline':'a capo',
-'shell':'nome della shell',
-'version':'versione della shell',
-'release':'release della shell',
-'abs_pwd':'path completa',
-'base_pwd':'directory corrente',
-'history_num':'numero del comando nella history',
-'cmd_num':'numero del comando',
-'prompt':'# se root, $ altrimenti',
-'backslash':'un backslash \\',
-}
-
 KEYWORDS={
     'dateLong': {
         'command':'$(date +"%d %b %Y")',
-        'help':'',
-        'example':''
+        'help':'data nel formato %d/%b/%Y',
+        'example':'<b>28 Feb 2004</b> foo@mypc /var/log'
     },
     'dateShort': {
         'command':'$(date +"%d/%m/%y")',
-        'help':'',
-        'example':''
+        'help':'data nel formato %d/%m/%y',
+        'example':'<b>28/02/04</b> foo@mypc /var/log'
     },
     'hourLong': {
         'command':'$(date +"%H:%M:%S")',
-        'help':'',
-        'example':''
+        'help':'ora nel formato %H:%M:%S',
+        'example':'<b>15:23:59</b> foo@mypc /var/log'
     },
     'hourShort': {
         'command':'$(date +"%H:%M")',
-        'help':'',
-        'example':''
+        'help':'ora nel formato %H:%M',
+        'example':'<b>15:23</b> foo@mypc /var/log'
     },
     'host': {
         'command':'\h',
-        'help':'',
-        'example':''
+        'help':'hostname fino al primo punto',
+        'example':'foo@<b>mypc</b> /var/log'
     },
     'user': {
         'command':'\u',
-        'help':'bla bla bla bla bla',
-        'example':'<u>foo</u>@mypc /var/log'
+        'help':'utente corrente',
+        'example':'<b>foo</b>@mypc /var/log'
     },
     'newline': {
         'command':'\n',
-        'help':'',
-        'example':''
+        'help':'a capo',
+        'example':'foo@mypc /var/log <b>↵</b> $'
     },
     'shell': {
         'command':'\s',
-        'help':'',
-        'example':''
+        'help':'nome della shell',
+        'example':'foo@mypc <b>bash</b> /var/log  $'
     },
     'version': {
         'command':'\v',
-        'help':'',
-        'example':''
+        'help':'versione della shell',
+        'example':'foo@mypc <b>4.2</b> /var/log  $'
     },
     'release': {
         'command':'\V',
-        'help':'',
-        'example':''
+        'help':'release della shell (versione + numero di patch)',
+        'example':'foo@mypc <b>4.2.8</b> /var/log  $'
     },
     'abs_pwd': {
         'command':'\w',
-        'help':'',
-        'example':''
+        'help':'path completa',
+        'example':'foo@mypc <b>/var/log</b> $'
     },
     'base_pwd': {
         'command':'\W',
-        'help':'',
-        'example':''
+        'help':'directory corrente',
+        'example':'foo@mypc <b>log</b> $'
     },
     'history_num': {
         'command':'\!',
-        'help':'',
-        'example':''
+        'help':'il numero nella cronologia del comando attuale',
+        'example':'<b>508</b> foo@mypc /var/log $ cd\n<b>509</b> foo@mypc ~ $'
     },
     'cmd_num': {
         'command':'\#',
-        'help':'',
-        'example':''
+        'help':'il numero di comando del comando attuale',
+        'example':'<b>3</b> foo@mypc /var/log $ echo "hello"\nhello\n<b>4</b> foo@mypc /var/log $'
     },
     'prompt': {
         'command':'\$',
-        'help':'',
-        'example':''
+        'help':'# se root, $ altrimenti',
+        'example':'foo@mypc /var/log <b>$</b> sudo su -\nroot@mypc ~ <b>#</b>'
     },
     'backslash': {
         'command':'\\',
-        'help':'',
-        'example':''
+        'help':'un backslash \\',
+        'example':'foo<b>\\</b>mypc /var/log $'
     },
 }
+
 
 def rgb2hex(colorTuple):
     esa=['#']
@@ -457,6 +418,7 @@ class Styling(gtk.VBox):
     
     def _on_style_changed(self):
         Styling._memory[self.keywordsBox.get_active()]=self._export_current_style()
+        print 'changed',self.keywordsBox.get_active()
         self.emit('changed')
     
     def get_styling(self):
@@ -679,6 +641,7 @@ class Window(gtk.Window):
         vbox.pack_start(btn,0,0,2)
         
         self.textview=FormatPromptTextView()
+        self.textview.connect('selection-change',self.on_formatPrompt_selection_change)
         self.textview.show()
         
         sw = gtk.ScrolledWindow()
@@ -721,6 +684,14 @@ class Window(gtk.Window):
         term.loadColors(shell.getGnomeTerminalColors())
         term.set_size(term.get_column_count(),10)
         return term
+    
+    def on_formatPrompt_selection_change(self,textview):
+        try:
+            start,end = textview.buffer.get_selection_bounds()
+            print textview.buffer.get_text(start,end)
+            
+        except ValueError, e:
+            pass
     
     def convert_to_bash_and_preview(self,*args):
         converted=self.convert_to_bash()
@@ -787,8 +758,8 @@ class Window(gtk.Window):
         #now convert every \x1b char with the octal equivalen \033
         line=''.join(text).replace('\x1b','\\'+str(oct(ord('\x1b'))))
         
-        for elem in commands: #convert commands in bash equivalent -> BAD use of strings. ro re-write
-            line=line.replace(elem,commands[elem])
+        for keywordName in KEYWORDS: #convert commands in bash equivalent -> BAD use of strings. to re-write
+            line=line.replace(keywordName,KEYWORDS[keywordName]['command'])
         
         for module in re.findall('plug_(.+\.py)',line):
             line=line.replace('plug_%s' % module,'\\$(python %s/%s)' % (PLUGINS_PATH,module))
