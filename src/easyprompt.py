@@ -177,7 +177,7 @@ class Styling(gtk.VBox):
     __gsignals__ = {
         'changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
                 ()),
-        'keyword-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
+        'keyword-request' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
                 (gobject.TYPE_STRING,)),
     }
     
@@ -387,6 +387,7 @@ class Styling(gtk.VBox):
         
         self.keywordsBox=KeywordsBox()
         self.keywordsBox.connect('keyword-changed',self._on_keyword_changed)
+        self.keywordsBox.connect('keyword-request',self._on_keyword_requested)
         self.keywordsBox.show()
         boxColorsAndStyle.pack_start(self.keywordsBox,0,0,3)
         
@@ -446,9 +447,12 @@ class Styling(gtk.VBox):
     def get_styling(self):
         return Styling._memory[self.keywordsBox.get_active()]
     
-    def _on_keyword_changed(self,widget,key):
-        self.emit('keyword-changed',key)
+    def _on_keyword_requested(self,widget,key):
+        self.emit('keyword-request',key)
     
+    def _on_keyword_changed(self,keywordBox,keywordName):
+        self.frameBgColors.set_color(Styling._memory[keywordName]['bgColor'])
+        self.frameFgColors.set_color(Styling._memory[keywordName]['fgColor'])
     
     def __str__(self):
         return self.__unicode__().encode('utf-8')
@@ -515,6 +519,8 @@ class FormatPromptTextView(gtk.TextView):
 class KeywordsBox(gtk.VBox):
     __gsignals__ = {
         'keyword-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
+                (gobject.TYPE_PYOBJECT,)),
+        'keyword-request' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
                 (gobject.TYPE_PYOBJECT,))
     }
     
@@ -549,12 +555,15 @@ class KeywordsBox(gtk.VBox):
         combobox.show()
         
         mainBox.pack_start(combobox,0,0,2)
+        
+        insertBtn=gtk.Button('Insert')
+        insertBtn.connect('clicked',self._on_insertBtn_clicked)
+        insertBtn.show()
+        mainBox.pack_start(insertBtn,0,0,2)
+        
         helpBox=gtk.VBox()
         
-        
         self.exampleLabel=gtk.Label()
-        #label.set_markup('<span foreground="blue"><u>%s</u></span>' % keyword)
-        #label.set_tooltip_text(helpDict[keyword])
         self.exampleLabel.show()
         
         helpBox.pack_start(self.exampleLabel)
@@ -569,6 +578,9 @@ class KeywordsBox(gtk.VBox):
         
         mainBox.show()
         self.pack_start(mainBox)
+    
+    def _on_insertBtn_clicked(self,*args):
+        self.emit('keyword-request',self.get_active())
     
     def _on_combobox_changed(self,combobox):
         keywordName=self.get_active()
@@ -601,7 +613,7 @@ class Window(gtk.Window):
         
         stylingBox=Styling()
         stylingBox.connect('changed',self.on_style_changed)
-        stylingBox.connect('keyword-changed',self.on_keyword_changed)
+        stylingBox.connect('keyword-request',self.on_keyword_requested)
         stylingBox.show()
         topBox.pack_start(stylingBox,0,0,2)
         
@@ -674,7 +686,7 @@ class Window(gtk.Window):
     def code_preview(self,prompt_format):
         self.codePreview.set_text(prompt_format.strip(u'\x00'))
     
-    def on_keyword_changed(self,widget,key):
+    def on_keyword_requested(self,widget,key):
         self.textview.buffer.insert_at_cursor(key)
     
     def convert_to_bash(self):
