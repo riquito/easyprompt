@@ -268,6 +268,9 @@ class Styling(gtk.VBox):
             return self.currentColor
         
         def set_color(self,colorName):
+            
+            self.currentColor = colorName
+            
             if colorName == None: colorName = 'transparent'
             
             currentRadioBtn=self.colors2radio[self.get_color() if self.get_color() else 'transparent']
@@ -291,6 +294,8 @@ class Styling(gtk.VBox):
         
         def __init__(self):
             gobject.GObject.__init__(self)
+            
+            self._can_send_signal = True
             
             self.set_label('Styles')
             self.set_border_width(1)
@@ -318,7 +323,7 @@ class Styling(gtk.VBox):
                       self.boldRadio,
                       self.faintRadio
                       ):
-                widget.connect('toggled', lambda w: self.emit('style-changed'))
+                widget.connect('toggled', self._send_changed_signal)
                 widget.show()
             
             
@@ -334,6 +339,10 @@ class Styling(gtk.VBox):
             
             self.add(tableStyles)
         
+        def _send_changed_signal(self,*args):
+            if self._can_send_signal:
+                self.emit('style-changed')
+        
         def get_styles(self):
             
             weight='normal'
@@ -348,6 +357,18 @@ class Styling(gtk.VBox):
                 'strikethrough' : self.strikethroughBtn.get_active(),
                 'invert' : self.invertBtn.get_active()
             }
+        
+        def set_styles(self,styles):
+            self._can_send_signals=False
+            
+            self.underlineBtn.set_active(styles['underline'])
+            self.strikethroughBtn.set_active(styles['strikethrough'])
+            self.invertBtn.set_active(styles['invert'])
+            self.normalRadio.set_active(styles['weight']=='normal')
+            self.boldRadio.set_active(styles['weight']=='bold')
+            self.faintRadio.set_active(styles['weight']=='faint')
+            
+            self._can_send_signals=True
     
     gobject.type_register(StylesContainer)
     
@@ -421,8 +442,8 @@ class Styling(gtk.VBox):
         print 'changed',self.keywordsBox.get_active()
         self.emit('changed')
     
-    def get_styling(self):
-        return Styling._memory[self.keywordsBox.get_active()]
+    def get_styling(self,keywordName):
+        return Styling._memory[keywordName]
     
     def _on_keyword_requested(self,widget,key):
         self.emit('keyword-request',key)
@@ -430,12 +451,16 @@ class Styling(gtk.VBox):
     def _on_keyword_changed(self,keywordBox,keywordName):
         self.frameBgColors.set_color(Styling._memory[keywordName]['bgColor'])
         self.frameFgColors.set_color(Styling._memory[keywordName]['fgColor'])
+        self.frameStyles.set_styles(Styling._memory[keywordName]['styles'])
+    
+    def get_current_keyword(self):
+        return self.keywordsBox.get_active()
     
     def __str__(self):
         return self.__unicode__().encode('utf-8')
     
     def __unicode__(self):
-        return repr(self.get_styling()).decode('utf-8')
+        return repr(self.get_styling(self.get_current_keyword())).decode('utf-8')
 
 gobject.type_register(Styling)
 
@@ -456,6 +481,9 @@ class FormatPromptTextView(gtk.TextView):
         'selection-change' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
                 ())
     }
+    
+    DEFAULT_BACKGROUND=(0,0,0)
+    DEFAULT_FOREGROUND=(255,255,255)
     
     def __init__(self,*args):
         gtk.TextView.__init__(self,*args)
@@ -488,10 +516,14 @@ class FormatPromptTextView(gtk.TextView):
             tag.set_property('weight',weight[1])
             table.add(tag)
         
+        for keywordName in KEYWORDS:
+            tag=gtk.TextTag(keywordName)
+            table.add(tag)
+        
         tag=gtk.TextTag('underline')
         tag.set_property('underline',True)
         table.add(tag)
-            
+        
         tag=gtk.TextTag('strikethrough')
         tag.set_property('strikethrough',True)
         table.add(tag)
@@ -505,8 +537,77 @@ class FormatPromptTextView(gtk.TextView):
         self.connect_after('move-cursor', self.on_move_cursor)
         self.connect('button-release-event', self._on_mouse_button_released)
         
+        self.buffer.connect('notify::cursor-position', self.on_cursor_position_change)
+        self.buffer.connect('changed', self.on_content_change)
+    
+    def _find_keyword_pos(self,text,keywordName):
+        
+        lenText=len(text)
+        lenKeywordName=len(keywordName)
+        
+        positions=[]
+        idx = 0
+        while True:
+            idx=text.find(keywordName,idx)
+            if idx == -1 : break
+            
+            positions.append((idx,idx+lenKeywordName))
+            idx = idx+lenKeywordName
+        
+        return positions
+    
+    def on_content_change(self,buffer,*args):
+        
+        text=buffer.get_text(*buffer.get_bounds())
+        
+        for keywordName in KEYWORDS:
+            positions=self._find_keyword_pos(text,keywordName)
+            
+            for start,end in positions:
+                buffer.apply_tag_by_name(
+                                 keywordName,
+                                 buffer.get_iter_at_offset(start),
+                                 buffer.get_iter_at_offset(end))
+    
+    def change_keyword_appearance(self,keywordName,styleObj):
+        
+        tagTable=self.buffer.get_tag_table()
+        tag=tagTable.lookup(keywordName)
+        
+        styling = styleObj.get_styling(keywordName)
+        
+        # XXX check if the 'invert' attribute is preserved on tag lookup
+        tag.invert = styling['styles']['invert'];
+        if styling['styles']['invert']:
+            styling['bgColor'],styling['fgColor']=styling['fgColor'],styling['bgColor']
+        
+        background = self.__class__.DEFAULT_BACKGROUND if not styling['bgColor'] else colors[styling['bgColor']]
+        tag.set_property('background',rgb2hex(background))
+        
+        foreground = self.__class__.DEFAULT_FOREGROUND if not styling['fgColor'] else colors[styling['fgColor']]
+        tag.set_property('foreground',rgb2hex(foreground))
+        
+        tag.set_property('strikethrough',styling['styles']['strikethrough'])
+        tag.set_property('underline',styling['styles']['underline'])
+        
+        for weightName,pangoValue in (
+                 ('faint',pango.WEIGHT_ULTRALIGHT),
+                 ('normal',pango.WEIGHT_NORMAL),
+                 ('bold',pango.WEIGHT_BOLD)
+                ):
+            
+            if weightName == styling['styles']['weight']:
+                tag.set_property('weight',pangoValue)
+                break
+        
+    
+    def on_cursor_position_change(self,buffer,*args):
+        print 'cursor pos changed'
+    
     def _on_mouse_button_released(self,textview,event):
-        self._on_selection_changed()
+        ## XXX check me
+        if self._has_selection:
+            self._on_selection_changed()
         
     def on_move_cursor(self,textview,step_size,count,extend_selection):
         if extend_selection:
@@ -621,11 +722,11 @@ class Window(gtk.Window):
         
         topBox=gtk.VBox()
         
-        stylingBox=Styling()
-        stylingBox.connect('changed',self.on_style_changed)
-        stylingBox.connect('keyword-request',self.on_keyword_requested)
-        stylingBox.show()
-        topBox.pack_start(stylingBox,0,0,2)
+        self.stylingBox=Styling()
+        self.stylingBox.connect('changed',self.on_style_changed)
+        self.stylingBox.connect('keyword-request',self.on_keyword_requested)
+        self.stylingBox.show()
+        topBox.pack_start(self.stylingBox,0,0,2)
         
         
         topBox.show()
@@ -642,6 +743,7 @@ class Window(gtk.Window):
         
         self.textview=FormatPromptTextView()
         self.textview.connect('selection-change',self.on_formatPrompt_selection_change)
+        self.texviewChangedId=self.textview.buffer.connect('changed',self.convert_to_bash_and_preview)
         self.textview.show()
         
         sw = gtk.ScrolledWindow()
@@ -663,9 +765,6 @@ class Window(gtk.Window):
         self.term=self.create_terminal()
         self.term.show()
         vbox.pack_start(self.term,0,0,2)
-        
-        self.texviewChangedId=self.textview.buffer.connect('changed',self.convert_to_bash_and_preview)
-        #colorBox.connect('color-selected',self.convert_to_bash_and_preview)
         
         btn=gtk.Button('Save')
         btn.connect('clicked', lambda *x: self.write_on_disk(self.convert_to_bash()))
@@ -694,6 +793,8 @@ class Window(gtk.Window):
             pass
     
     def convert_to_bash_and_preview(self,*args):
+        return
+        
         converted=self.convert_to_bash()
         self.preview(converted)
         self.code_preview(converted)
@@ -803,38 +904,9 @@ class Window(gtk.Window):
             self.apply_tag_to_template(self.textview,colorName)
     
     def on_style_changed(self,stylingObj):
-        self.apply_style_to_template(self.textview,stylingObj)
-    
-    def apply_style_to_template(self,textview,stylingObj):
-        buffer=textview.buffer
-        tagTable=buffer.get_tag_table()
-        styling=stylingObj.get_styling()
         
-        try:
-            selectionStart,selectionEnd=buffer.get_selection_bounds()
-            
-            buffer.remove_all_tags(selectionStart,selectionEnd)
-            
-            to_apply=[]
-            
-            if styling['styles']['invert']:
-                to_apply.append('invert')
-                styling['bgColor'],styling['fgColor']=styling['fgColor'],styling['bgColor']
-            
-            if styling['bgColor']: to_apply.append("bg_"+styling['bgColor'])
-            
-            if styling['fgColor']: to_apply.append("fg_"+styling['fgColor'])
-            
-            if styling['styles']['strikethrough']: to_apply.append('strikethrough')
-            
-            if styling['styles']['underline']: to_apply.append('underline')
-            
-            if styling['styles']['weight']: to_apply.append('weight_'+styling['styles']['weight'])
-            
-            for tagName in to_apply:
-                buffer.apply_tag_by_name(tagName,selectionStart,selectionEnd)
-            
-        except ValueError: pass #nothing selected
+        keywordName=self.stylingBox.get_current_keyword()
+        self.textview.change_keyword_appearance(keywordName,stylingObj)
     
     def on_delete_event(self,*args):
         gtk.main_quit()
