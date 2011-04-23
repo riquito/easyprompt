@@ -134,6 +134,44 @@ def rgb2hex(colorTuple):
         esa.append(len(ascii)==4 and ascii[-2:] or ('0'+ascii[-1:]))
     return ''.join(esa)
 
+def get_tag_bounds(iter,tag):
+    if not iter.has_tag(tag):
+        return None
+    
+    startIter=iter.copy()
+    endIter=iter.copy()
+    
+    endIter.forward_to_tag_toggle(tag)
+    
+    if not startIter.begins_tag(tag):
+        startIter.backward_to_tag_toggle(tag)
+    
+    return (startIter,endIter)
+
+def has_tag_in_range(tag,startIter,endIter):
+    
+    startIter = startIter.copy()
+    
+    taggedIter = None
+    
+    if startIter.has_tag(tag):
+        taggedIter = startIter.copy()
+        #must move once to search for previous toggle (we could be yet at start)
+        taggedIter.forward_char() 
+        taggedIter.backward_to_tag_toggle(tag)
+        return taggedIter
+    
+    while 1:
+        if not startIter.has_tag(tag):
+            was_last = not startIter.forward_char()
+            if was_last or startIter.equal(endIter): break
+        else:
+            taggedIter=startIter.copy()
+            break
+    
+    
+    return taggedIter
+
 class Styling(gtk.VBox):
     __gsignals__ = {
         'changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
@@ -439,7 +477,7 @@ class Styling(gtk.VBox):
     
     def _on_style_changed(self):
         Styling._memory[self.keywordsBox.get_active()]=self._export_current_style()
-        print 'changed',self.keywordsBox.get_active()
+        print '\nstyle changed',Styling._memory[self.keywordsBox.get_active()],"\n"
         self.emit('changed')
     
     def get_styling(self,keywordName):
@@ -449,6 +487,7 @@ class Styling(gtk.VBox):
         self.emit('keyword-request',key)
     
     def _on_keyword_changed(self,keywordBox,keywordName):
+        print 'keyword changed',keywordName,Styling._memory[keywordName]
         self.frameBgColors.set_color(Styling._memory[keywordName]['bgColor'])
         self.frameFgColors.set_color(Styling._memory[keywordName]['fgColor'])
         self.frameStyles.set_styles(Styling._memory[keywordName]['styles'])
@@ -479,7 +518,7 @@ class FormatPromptTextView(gtk.TextView):
         'selection-toggle' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
                 (gobject.TYPE_BOOLEAN,)),
         'selection-change' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                ())
+                (gobject.TYPE_PYOBJECT,)),
     }
     
     DEFAULT_BACKGROUND=(0,0,0)
@@ -533,12 +572,14 @@ class FormatPromptTextView(gtk.TextView):
         
         # add selection change capabilities
         self._has_selection = False
-        self.buffer.connect('notify::has-selection', self.on_selection_toggle)
-        self.connect_after('move-cursor', self.on_move_cursor)
+        self.id_has_sel=self.buffer.connect('notify::has-selection', self.on_selection_toggle)
+        self.id_move_cursor=self.connect_after('move-cursor', self.on_move_cursor)
         self.connect('button-release-event', self._on_mouse_button_released)
         
-        self.buffer.connect('notify::cursor-position', self.on_cursor_position_change)
-        self.buffer.connect('changed', self.on_content_change)
+        
+        self.connect('button-release-event', self.xyz)
+        
+        self.id_buf_changed=self.buffer.connect('changed', self.on_content_change)
     
     def _find_keyword_pos(self,text,keywordName):
         
@@ -601,15 +642,20 @@ class FormatPromptTextView(gtk.TextView):
                 break
         
     
-    def on_cursor_position_change(self,buffer,*args):
-        print 'cursor pos changed'
+    def xyz(self,*args):
+        if not self._has_selection:
+            selectedKeyword = self._try_to_select_keyword(self.buffer,True)
+            if selectedKeyword: self._on_selection_changed(selectedKeyword)
     
     def _on_mouse_button_released(self,textview,event):
         ## XXX check me
+        print 'btn rel CHECK sel'
         if self._has_selection:
+            print 'btn rel has sel'
             self._on_selection_changed()
         
     def on_move_cursor(self,textview,step_size,count,extend_selection):
+        print 'move cursor'
         if extend_selection:
             try:
                 start, end = self.buffer.get_selection_bounds()
@@ -618,13 +664,73 @@ class FormatPromptTextView(gtk.TextView):
                     self._on_selection_changed()
             except ValueError, e:
                 pass
+        else:
+            selectedKeyword = self._try_to_select_keyword(textview.buffer,count > 0)
+            self._on_selection_changed(selectedKeyword)
     
-    def on_selection_toggle(self,textBuffer,*args):
+    def _try_to_select_keyword(self,buffer,move_left_to_right):
+        print 'try to sel key'
+        self.handler_block(self.id_move_cursor)
+        
+        selectedKeyword = None
+        
+        cursor_pos = buffer.get_property('cursor-position')
+        current_iter = buffer.get_iter_at_offset(cursor_pos)
+        
+        for tag in current_iter.get_tags():
+            tagName = tag.get_property('name')
+            if not current_iter.begins_tag(tag) and tagName in KEYWORDS:
+                print 'selecting'
+                startIter,endIter = get_tag_bounds(current_iter,tag)
+                if move_left_to_right > 0:
+                    buffer.select_range(startIter,endIter)
+                else:
+                    buffer.select_range(endIter,startIter)
+                
+                selectedKeyword = tagName
+                
+                break
+        
+        self.handler_unblock(self.id_move_cursor)
+        
+        print 'release'
+        
+        return selectedKeyword
+    
+    def on_selection_toggle(self,buffer,*args):
         self._has_selection = not self._has_selection
+        print 'sel toggled',self._has_selection,buffer.get_has_selection()
         self.emit('selection-toggle',self._has_selection)
     
-    def _on_selection_changed(self):
-        self.emit('selection-change')
+    def _on_selection_changed(self,selectedKeyword=None):
+        print 'sel changed',selectedKeyword
+        buffer = self.buffer
+        
+        if self._has_selection and not selectedKeyword:
+            tagTable = buffer.get_tag_table()
+            
+            for keywordName in KEYWORDS:
+                tag = tagTable.lookup(keywordName)
+                
+                startSel,endSel = buffer.get_selection_bounds()
+                
+                tagIter = has_tag_in_range(tag,startSel,endSel)
+                if not tagIter: continue
+                
+                self.handler_block(self.id_move_cursor)
+                
+                newStartSel = tagIter.copy()
+                newEndSel = tagIter.copy()
+                newEndSel.forward_to_tag_toggle(tag)
+                
+                buffer.select_range(newStartSel,newEndSel)
+                
+                self.handler_unblock(self.id_move_cursor)
+                
+                selectedKeyword = keywordName
+        
+        print 'sel',selectedKeyword
+        self.emit('selection-change',selectedKeyword)
     
 
 class KeywordsBox(gtk.VBox):
@@ -784,7 +890,7 @@ class Window(gtk.Window):
         term.set_size(term.get_column_count(),10)
         return term
     
-    def on_formatPrompt_selection_change(self,textview):
+    def on_formatPrompt_selection_change(self,textview,keywordSelected):
         try:
             start,end = textview.buffer.get_selection_bounds()
             print textview.buffer.get_text(start,end)
