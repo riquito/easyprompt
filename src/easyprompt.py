@@ -282,7 +282,12 @@ class Styling(gtk.VBox):
                     radioButton=gtk.RadioButton(group)
                     if group == None: group = radioButton
                     radioButton.show()
-                    singleColorBox.pack_start(radioButton,0,0,2)
+                    
+                    align=gtk.Alignment(0.5, 0.5, 0, 0)
+                    align.add(radioButton)
+                    align.show()
+                    
+                    singleColorBox.pack_start(align,0,0,2)
                     
                     singleColorBox.show()
                     
