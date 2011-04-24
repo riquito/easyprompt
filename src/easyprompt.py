@@ -65,62 +65,62 @@ KEYWORDS={
         'example':'<b>15:23</b> foo@mypc /var/log'
     },
     'host': {
-        'command':'\h',
+        'command':r'\h',
         'help':'hostname fino al primo punto',
         'example':'foo@<b>mypc</b> /var/log'
     },
     'user': {
-        'command':'\u',
+        'command':r'\u',
         'help':'utente corrente',
         'example':'<b>foo</b>@mypc /var/log'
     },
     'newline': {
-        'command':'\n',
+        'command':r'\n',
         'help':'a capo',
         'example':'foo@mypc /var/log <b>↵</b> $'
     },
     'shell': {
-        'command':'\s',
+        'command':r'\s',
         'help':'nome della shell',
         'example':'foo@mypc <b>bash</b> /var/log  $'
     },
     'version': {
-        'command':'\v',
+        'command':r'\v',
         'help':'versione della shell',
         'example':'foo@mypc <b>4.2</b> /var/log  $'
     },
     'release': {
-        'command':'\V',
+        'command':r'\V',
         'help':'release della shell (versione + numero di patch)',
         'example':'foo@mypc <b>4.2.8</b> /var/log  $'
     },
     'abs_pwd': {
-        'command':'\w',
+        'command':r'\w',
         'help':'path completa',
         'example':'foo@mypc <b>/var/log</b> $'
     },
     'base_pwd': {
-        'command':'\W',
+        'command':r'\W',
         'help':'directory corrente',
         'example':'foo@mypc <b>log</b> $'
     },
     'history_num': {
-        'command':'\!',
+        'command':r'\!',
         'help':'il numero nella cronologia del comando attuale',
         'example':'<b>508</b> foo@mypc /var/log $ cd\n<b>509</b> foo@mypc ~ $'
     },
     'cmd_num': {
-        'command':'\#',
+        'command':r'\#',
         'help':'il numero di comando del comando attuale',
         'example':'<b>3</b> foo@mypc /var/log $ echo "hello"\nhello\n<b>4</b> foo@mypc /var/log $'
     },
     'prompt': {
-        'command':'\$',
+        'command':r'\$',
         'help':'# se root, $ altrimenti',
         'example':'foo@mypc /var/log <b>$</b> sudo su -\nroot@mypc ~ <b>#</b>'
     },
     'backslash': {
-        'command':'\\',
+        'command':r'\\',
         'help':'un backslash \\',
         'example':'foo<b>\\</b>mypc /var/log $'
     },
