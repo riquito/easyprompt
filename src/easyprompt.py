@@ -772,21 +772,48 @@ class KeywordsBox(gtk.VBox):
     def __init__(self):
         gtk.VBox.__init__(self)
         
-        for txt in ('Per colorare una parola selezionarla e cliccare su un colore',
-                    'Le seguenti parole chiave verranno espanse nelle relative informazioni\n'):
-            labelHelp=gtk.Label(txt)
-            labelHelp.show()
-            align=gtk.Alignment(0,0,0,0.5)
-            align.add(labelHelp)
-            align.show()
-            self.pack_start(align)
-            
+        labelHelp=gtk.Label("Scegli una parola chiave dall'elenco qui sotto o scrivi quello che preferisci\n"
+                            "Ricorda che su un terminale una parola in bold avrà un colore più brillante, una in faint più scuro\n")
+        labelHelp.show()
+        align=gtk.Alignment(0,0,0,0)
+        align.add(labelHelp)
+        align.show()
+        self.pack_start(align,0,1,1)
         
         mainBox=gtk.HBox()
         
+        self.keywordToIndex = {}
+        
+        '''
+        HHHHHHHHHHHHHHHHHHHHHHHH
+          
+          VVVVVVVVVVVVVVVVVVVV
+          
+            HHHHHHHHHHHHHHHHHH
+            
+              combo | button
+            
+            HHHHHHHHHHHHHHHHHH
+            ---
+            HHHHH
+            H ^ H
+            H ^ H
+            HHHHH
+          
+          VVVVVVVVVVVVVVVVVVVVV
+        
+        HHHHHHHHHHHHHHHHHHHHHHHH
+        '''
+        
+        tmpHbox=gtk.HBox()
+        
         liststore = gtk.ListStore(gobject.TYPE_STRING)
+        idx = 0
         for key in KEYWORDS:
             liststore.append((key,))
+            self.keywordToIndex[key] = idx
+            idx += 1
+        
         combobox = gtk.ComboBox(liststore)
         cell = gtk.CellRendererText()
         combobox.pack_start(cell, True)
@@ -799,23 +826,43 @@ class KeywordsBox(gtk.VBox):
         
         combobox.show()
         
-        mainBox.pack_start(combobox,0,0,2)
+        #mainBox.pack_start(combobox,0,0,2)
+        tmpHbox.pack_start(combobox,0,0,2)
         
         insertBtn=gtk.Button('Insert')
         insertBtn.connect('clicked',self._on_insertBtn_clicked)
         insertBtn.show()
-        mainBox.pack_start(insertBtn,0,0,2)
+        #mainBox.pack_start(insertBtn,0,0,2)
+        tmpHbox.pack_start(insertBtn,0,0,2)
+        
+        tmpHbox.show()
+        
+        vbox=gtk.VBox()
+        vbox.show()
+        vbox.pack_start(tmpHbox,0,0,0)
+        zbox=gtk.HBox() # dummy box that fill the vertical space
+        zbox.show()
+        vbox.pack_start(zbox,0,1,1)
+        
+        mainBox.pack_start(vbox,0,0,0)
         
         helpBox=gtk.VBox()
         
         self.exampleLabel=gtk.Label()
         self.exampleLabel.show()
-        
-        helpBox.pack_start(self.exampleLabel)
+        align = gtk.Alignment(0,0,0,0)
+        align.add(self.exampleLabel)
+        align.show()
+        helpBox.pack_start(align)
         
         self.descLabel=gtk.Label()
         self.descLabel.show()
-        helpBox.pack_start(self.descLabel)
+        self.descLabel.set_justify(gtk.JUSTIFY_LEFT)
+        align = gtk.Alignment(0,0,0,0)
+        align.add(self.descLabel)
+        align.show()
+        
+        helpBox.pack_start(align)
         
         
         helpBox.show()
@@ -831,7 +878,7 @@ class KeywordsBox(gtk.VBox):
         keywordName=self.get_active()
         keywordData=KEYWORDS[keywordName]
         self.exampleLabel.set_markup(keywordData['example'])
-        self.descLabel.set_markup(keywordData['help'])
+        self.descLabel.set_text(keywordData['help'])
         self.emit('keyword-changed',keywordName)
     
     def get_active(self):
