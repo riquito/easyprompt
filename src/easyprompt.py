@@ -684,13 +684,10 @@ class FormatPromptTextView(gtk.TextView):
     
     def _on_mouse_button_released(self,textview,event):
         ## XXX check me
-        print 'btn rel CHECK sel'
         if self._has_selection:
-            print 'btn rel has sel'
             self._on_selection_changed()
         
     def on_move_cursor(self,textview,step_size,count,extend_selection):
-        print 'move cursor'
         if extend_selection:
             try:
                 start, end = self.buffer.get_selection_bounds()
@@ -704,7 +701,6 @@ class FormatPromptTextView(gtk.TextView):
             self._on_selection_changed(selectedKeyword)
     
     def _try_to_select_keyword(self,buffer,move_left_to_right):
-        print 'try to sel key'
         self.handler_block(self.id_move_cursor)
         
         selectedKeyword = None
@@ -715,7 +711,7 @@ class FormatPromptTextView(gtk.TextView):
         for tag in current_iter.get_tags():
             tagName = tag.get_property('name')
             if not current_iter.begins_tag(tag) and tagName in KEYWORDS:
-                print 'selecting'
+                
                 startIter,endIter = get_tag_bounds(current_iter,tag)
                 if move_left_to_right > 0:
                     buffer.select_range(startIter,endIter)
@@ -728,17 +724,15 @@ class FormatPromptTextView(gtk.TextView):
         
         self.handler_unblock(self.id_move_cursor)
         
-        print 'release'
-        
         return selectedKeyword
     
     def on_selection_toggle(self,buffer,*args):
         self._has_selection = not self._has_selection
-        print 'sel toggled',self._has_selection,buffer.get_has_selection()
         self.emit('selection-toggle',self._has_selection)
+        if not self._has_selection:
+            self._on_selection_changed()
     
     def _on_selection_changed(self,selectedKeyword=None):
-        print 'sel changed',selectedKeyword
         buffer = self.buffer
         
         if self._has_selection and not selectedKeyword:
@@ -764,7 +758,6 @@ class FormatPromptTextView(gtk.TextView):
                 
                 selectedKeyword = keywordName
         
-        print 'sel',selectedKeyword
         self.emit('selection-change',selectedKeyword)
     
 
