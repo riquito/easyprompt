@@ -298,6 +298,9 @@ class Styling(gtk.VBox):
                     
                     tableColors.attach(singleColorBox,col,col+1,row,row+1)
             
+            self.invisibleRadioBtn = gtk.RadioButton(group)
+            singleColorBox.pack_start(self.invisibleRadioBtn,0,0,0)
+            
             tableColors.show()
             
             self.add(tableColors)
@@ -310,7 +313,11 @@ class Styling(gtk.VBox):
         def get_color(self):
             return self.currentColor
         
-        def set_color(self,colorName):
+        def set_color(self,colorName=-1):
+            
+            if colorName == -1 :
+                self.invisibleRadioBtn.set_active(True)
+                return
             
             self.currentColor = colorName
             
@@ -471,7 +478,7 @@ class Styling(gtk.VBox):
         for keywordName in KEYWORDS:
             Styling._memory[keywordName]=deepcopy(baseStyle)
         
-        self.keywordsBox.set_active(0)
+        self.keywordsBox.set_active_first()
     
     def _export_current_style(self):
         return {
@@ -481,12 +488,16 @@ class Styling(gtk.VBox):
         }
     
     def _on_style_changed(self):
-        Styling._memory[self.keywordsBox.get_active()]=self._export_current_style()
+        if self.keywordsBox.is_active():
+            Styling._memory[self.keywordsBox.get_active()]=self._export_current_style()
         print '\nstyle changed',Styling._memory[self.keywordsBox.get_active()],"\n"
         self.emit('changed')
     
     def get_styling(self,keywordName):
-        return Styling._memory[keywordName]
+        if self.keywordsBox.is_active():
+            return Styling._memory[keywordName]
+        else:
+            return self._export_current_style()
     
     def _on_keyword_requested(self,widget,key):
         self.emit('keyword-request',key)
@@ -497,8 +508,27 @@ class Styling(gtk.VBox):
         self.frameFgColors.set_color(Styling._memory[keywordName]['fgColor'])
         self.frameStyles.set_styles(Styling._memory[keywordName]['styles'])
     
+    def set_current_keyword(self,keywordName):
+        self.keywordsBox.set_active(keywordName)
+    
     def get_current_keyword(self):
         return self.keywordsBox.get_active()
+    
+    def activate_keyword(self):
+        self.keywordsBox.activate_keyword()
+        self._on_keyword_changed(self.keywordsBox,self.keywordsBox.get_active())
+    
+    def deactivate_keyword(self):
+        self.keywordsBox.deactivate_keyword()
+        
+        self.frameBgColors.set_color(-1)
+        self.frameFgColors.set_color(-1)
+        self.frameStyles.set_styles({
+            'weight' : 'normal',
+            'underline' : False,
+            'strikethrough' : False,
+            'invert' : False
+        })
     
     def __str__(self):
         return self.__unicode__().encode('utf-8')
@@ -816,8 +846,21 @@ class KeywordsBox(gtk.VBox):
         index = self.combobox.get_active()
         return model[index][0]
     
-    def set_active(self,index):
-        index = self.combobox.set_active(index)
+    def set_active(self,keywordName):
+        index = self.keywordToIndex[keywordName]
+        self.combobox.set_active(index)
+    
+    def is_active(self):
+        return self.get_property('sensitive')
+    
+    def set_active_first(self):
+        self.combobox.set_active(0)
+    
+    def activate_keyword(self):
+        self.set_sensitive(True)
+    
+    def deactivate_keyword(self):
+        self.set_sensitive(False)
 
 gobject.type_register(KeywordsBox)
 
@@ -898,10 +941,14 @@ class Window(gtk.Window):
     def on_formatPrompt_selection_change(self,textview,keywordSelected):
         try:
             start,end = textview.buffer.get_selection_bounds()
-            print textview.buffer.get_text(start,end)
+            if keywordSelected:
+                self.stylingBox.activate_keyword()
+                self.stylingBox.set_current_keyword(keywordSelected)
+            else:
+                self.stylingBox.deactivate_keyword()
             
         except ValueError, e:
-            pass
+            self.stylingBox.activate_keyword()
     
     def convert_to_bash_and_preview(self,*args):
         return
