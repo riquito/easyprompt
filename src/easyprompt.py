@@ -42,6 +42,10 @@ colors['purple']=(204,0,204)
 colors['brown']=(204,204,0)
 colors['gray']=(170,170,170)
 
+COLORNAME_TO_RGB = colors
+RGB_TO_COLORNAME = dict((a,b) for b,a in COLORNAME_TO_RGB.iteritems())
+
+
 
 KEYWORDS={
     'dateLong': {
@@ -134,6 +138,12 @@ def rgb2hex(colorTuple):
         esa.append(len(ascii)==4 and ascii[-2:] or ('0'+ascii[-1:]))
     return ''.join(esa)
 
+def hex2rgb(hexColor):
+    if hexColor[0] == '#': hexColor = hexColor[1:]
+    elif hexColor[0:2].lower() == '0x': hexColor = hexColor[2:]
+    if len(hexColor) < 6: hexColor = hexColor[0]+'0'+hexColor[1]+'0'+hexColor[2]+'0'
+    return int(hexColor[0:2], 16), int(hexColor[2:4], 16), int(hexColor[4:6], 16)
+
 def get_tag_bounds(iter,tag):
     if not iter.has_tag(tag):
         return None
@@ -171,6 +181,225 @@ def has_tag_in_range(tag,startIter,endIter):
     
     
     return taggedIter
+
+
+class TextStyle:
+    INCONSISTENT = -1
+    
+    WEIGHT_NORMAL = 'normal'
+    WEIGHT_BOLD = 'bold'
+    WEIGHT_FAINT = 'faint'
+    
+    def __init__(self):
+        self.background = None
+        self.foreground = None
+        self.underline = None
+        self.strikethrough = None
+        self.weight = None
+        self.invert = None
+    
+    def _color_to_rgb(self,color):
+        if isinstance(color,tuple): return color
+        elif color.startswith('#'):
+            return hex2rgb(color)
+        else:
+            try: return COLORNAME_TO_RGB[color]
+            except Exception,e:
+                raise Exception('not a color [%s]' % color)
+    
+    def calculate_background(self):
+        return self.foreground if self.invert else self.background
+    
+    def calculate_foreground(self):
+        return self.background if self.invert else self.foreground
+        
+    def set(self,attrName,value):
+        if attrName == 'background' or attrName == 'foreground':
+            if not (value == None or value == TextStyle.INCONSISTENT):
+                value = self._color_to_rgb(value)
+        
+        setattr(self,attrName,value)
+    
+    def get(self,attrName):
+        return getattr(self,attrName)
+    
+    def unset(self,attrName):
+        setattr(self,attrName,None)
+    
+    def set_inconsistent(self,attrName):
+        setattr(self,attrName,TextStyle.INCONSISTENT)
+    
+    def is_inconsistent(self,attrName):
+        return getattr(self,attrName) == TextStyle.INCONSISTENT
+    
+    @staticmethod
+    def to_gtk_tag(tstyle,tag = None):
+        if not tag:
+            tag = gtk.TextTag()
+        
+        if tstyle.invert and not tstyle.is_inconsistent('invert'):
+            tag.invert = True;
+        
+        for attrName in ('underline','strikethrough','background','foreground'):
+            
+            if not tstyle.is_inconsistent(attrName):
+                value = tstyle.get(attrName)
+                
+                if attrName == 'background' or attrName == 'foreground':
+                    
+                    fakeAttrName = attrName
+                    
+                    if attrName =='background' and tstyle.invert:
+                        fakeAttrName = 'foreground'
+                    elif attrName =='foreground' and tstyle.invert:
+                        fakeAttrName = 'background'
+                    
+                    if value == None:
+                        tag.set_property(fakeAttrName+'-set',False)
+                    else:
+                        tag.set_property(fakeAttrName,rgb2hex(value))
+                        tag.set_property(fakeAttrName+'-set',True)
+                    
+                else:
+                    tag.set_property(attrName,value)
+                    tag.set_property(attrName+'-set',value)
+        
+        if not tstyle.is_inconsistent('weight'):
+            value = tstyle.get('weight')
+            
+            if value == None:
+                tag.set_property('weight',pango.WEIGHT_NORMAL)
+                tag.set_property('weight-set',False)
+            else:
+                if value == TextStyle.WEIGHT_FAINT:
+                    tag.set_property('weight',pango.WEIGHT_ULTRALIGHT)
+                elif value == TextStyle.WEIGHT_BOLD:
+                    tag.set_property('weight',pango.WEIGHT_BOLD)
+                else:
+                    tag.set_property('weight',pango.WEIGHT_NORMAL)
+                
+                tag.set_property('weight-set',True)
+        
+        return tag
+    
+    @staticmethod
+    def to_gtk_tags(tstyle,tag_table):
+        
+        tags=[]
+        
+        for attrName in ('underline','strikethrough','background','foreground'):
+            
+            if not tstyle.is_inconsistent(attrName):
+                value = tstyle.get(attrName)
+                
+                if attrName == 'background' or attrName == 'foreground':
+                    
+                    fakeAttrName = attrName
+                    
+                    if tstyle.invert and not tstyle.is_inconsistent('invert'):
+                        
+                        if attrName =='background':
+                            fakeAttrName = 'foreground'
+                        elif attrName =='foreground':
+                            fakeAttrName = 'background'
+                    
+                    if value != None:
+                        tag = tag_table.lookup({'foreground':'fg_','background':'bg_'}[attrName]+RGB_TO_COLORNAME[value])
+                        tag.set_property(fakeAttrName,rgb2hex(value))
+                        tags.append(tag)
+                    
+                elif value:
+                    tag = tag_table.lookup(attrName)
+                    tag.set_property(attrName,value)
+                    tags.append(tag)
+        
+        if not tstyle.is_inconsistent('weight'):
+            value = tstyle.get('weight')
+            
+            if value == TextStyle.WEIGHT_FAINT:
+                tags.append(tag_table.lookup('weight_faint'))
+            elif value == TextStyle.WEIGHT_BOLD:
+                tags.append(tag_table.lookup('weight_bold'))
+            elif value == TextStyle.WEIGHT_NORMAL:
+                tags.append(tag_table.lookup('weight_normal'))
+        
+        return tags
+    
+    @staticmethod
+    def from_gtk_tag(tag):
+        
+        tstyle = TextStyle()
+        
+        tagName = tag.get_property('name')
+        
+        if getattr(tag,'invert',False):
+            tstyle.set('invert',True)
+        
+        if tag.get_property('background-set'):
+            attrName = 'foreground' if tstyle.invert else 'background'
+            tstyle.set(attrName,RGB_TO_COLORNAME[tag.get_property('background-rgb')])
+        
+        if tag.get_property('foreground-set'):
+            attrName = 'background' if tstyle.invert else 'foreground'
+            tstyle.set(attrName,RGB_TO_COLORNAME[tag.get_property('foreground-rgb')])
+        
+        if tag.get_property('underline-set'):
+            tstyle.set('underline',tag.get_property('underline'))
+        
+        if tag.get_property('strikethrough-set'):
+            tstyle.set('strikethrough',tag.get_property('strikethrough'))
+            
+        if tag.get_property('weight-set'):
+            
+            pangoWeight = tag.get_property('weight')
+            
+            if pangoWeight == pango.WEIGHT_BOLD:
+                tstyle.set('weight',TextStyle.WEIGHT_BOLD)
+            elif pangoWeight == pango.WEIGHT_ULTRALIGHT:
+                tstyle.set('weight',TextStyle.WEIGHT_FAINT)
+            else:
+                tstyle.set('weight',TextStyle.WEIGHT_NORMAL)
+        
+        return tstyle
+       
+    @staticmethod
+    def from_gtk_selection(startIter,endIter):
+        
+        text_styles = []
+        
+        currentIter = startIter.copy()
+        while not currentIter.equal(endIter):
+            
+            singleCharStyles = []
+            
+            for tag in currentIter.get_tags():
+                singleCharStyles.append(TextStyle.from_gtk_tag(tag))
+            
+            text_styles.append(TextStyle.merge_styles(singleCharStyles,fill_empty_properties=True))
+            
+            currentIter.forward_char()
+        
+        return TextStyle.merge_styles(text_styles)
+    
+    @staticmethod
+    def merge_styles(text_styles,fill_empty_properties=False):
+        if not len(text_styles): return TextStyle()
+        
+        tstyle = text_styles[0]
+        
+        for ts in text_styles[1:]:
+            
+            for attrName in ('underline','strikethrough','background','foreground','weight','invert'):
+                
+                currentValue = tstyle.get(attrName)
+                newValue = ts.get(attrName)
+                
+                if fill_empty_properties and currentValue == None:
+                    tstyle.set(attrName,newValue)
+                elif currentValue != newValue:
+                    tstyle.set_inconsistent(attrName)
+        
+        return tstyle
 
 class Styling(gtk.VBox):
     __gsignals__ = {
@@ -311,13 +540,18 @@ class Styling(gtk.VBox):
             self.emit('color-selected', self.currentColor)
         
         def get_color(self):
+            '''Return the color name'''
             return self.currentColor
         
-        def set_color(self,colorName=-1):
-            
-            if colorName == -1 :
+        def set_color(self,color=TextStyle.INCONSISTENT):
+            if color == TextStyle.INCONSISTENT:
                 self.invisibleRadioBtn.set_active(True)
                 return
+            
+            if isinstance(color,tuple):
+                colorName = RGB_TO_COLORNAME[color]
+            else:
+                colorName = color
             
             self.currentColor = colorName
             
@@ -361,9 +595,9 @@ class Styling(gtk.VBox):
             self.strikethroughBtn=gtk.CheckButton('strikethrough')
             self.invertBtn=gtk.CheckButton('invert')
             
-            self.normalRadio=gtk.RadioButton(None,'normal')
-            self.boldRadio=gtk.RadioButton(self.normalRadio,'bold')
-            self.faintRadio=gtk.RadioButton(self.normalRadio,'faint')
+            self.normalRadio=gtk.RadioButton(None,TextStyle.WEIGHT_NORMAL)
+            self.boldRadio=gtk.RadioButton(self.normalRadio,TextStyle.WEIGHT_BOLD)
+            self.faintRadio=gtk.RadioButton(self.normalRadio,TextStyle.WEIGHT_FAINT)
             
             for widget in (
                       self.underlineBtn,
@@ -376,6 +610,7 @@ class Styling(gtk.VBox):
                 widget.connect('toggled', self._send_changed_signal)
                 widget.show()
             
+            self.weightRadioInconsistent=gtk.RadioButton(self.normalRadio,None)
             
             tableStyles.attach(self.normalRadio,0,1,0,1)
             tableStyles.attach(self.boldRadio,0,1,1,2)
@@ -389,34 +624,50 @@ class Styling(gtk.VBox):
             
             self.add(tableStyles)
         
-        def _send_changed_signal(self,*args):
+        def _send_changed_signal(self,toggleBtn,*args):
+            toggleBtn.set_inconsistent(False)
             if self._can_send_signal:
                 self.emit('style-changed')
         
         def get_styles(self):
+            tstyle = TextStyle()
             
-            weight='normal'
-            if self.boldRadio.get_active():
-                weight='bold'
+            if self.weightRadioInconsistent.get_active():
+                tstyle.set_inconsistent('weight')
+            elif self.boldRadio.get_active():
+                tstyle.weight = TextStyle.WEIGHT_BOLD
             elif self.faintRadio.get_active():
-                weight='faint'
+                tstyle.weight = TextStyle.WEIGHT_FAINT
+            else:
+                tstyle.weight = TextStyle.WEIGHT_NORMAL
             
-            return {
-                'weight' : weight,
-                'underline' : self.underlineBtn.get_active(),
-                'strikethrough' : self.strikethroughBtn.get_active(),
-                'invert' : self.invertBtn.get_active()
-            }
+            for attrName in ('underline','strikethrough','invert'):
+                toggleBtn = getattr(self,attrName+'Btn')
+                if toggleBtn.get_inconsistent():
+                    tstyle.set_inconsistent(attrName)
+                else:
+                    tstyle.set(attrName,toggleBtn.get_active())
+            
+            return tstyle
         
-        def set_styles(self,styles):
+        def set_styles(self,tstyle):
             self._can_send_signals=False
+            print 'set_styles',tstyle
             
-            self.underlineBtn.set_active(styles['underline'])
-            self.strikethroughBtn.set_active(styles['strikethrough'])
-            self.invertBtn.set_active(styles['invert'])
-            self.normalRadio.set_active(styles['weight']=='normal')
-            self.boldRadio.set_active(styles['weight']=='bold')
-            self.faintRadio.set_active(styles['weight']=='faint')
+            for attrName in ('underline','strikethrough','invert'):
+                toggleBtn = getattr(self,attrName+'Btn')
+                if tstyle.is_inconsistent(attrName):
+                    toggleBtn.set_inconsistent(True)
+                else:
+                    toggleBtn.set_inconsistent(False)
+                    toggleBtn.set_active(tstyle.get(attrName) == True)
+            
+            if tstyle.is_inconsistent('weight'):
+                self.weightRadioInconsistent.set_active(True)
+            else:
+                self.normalRadio.set_active(tstyle.weight == TextStyle.WEIGHT_NORMAL)
+                self.boldRadio.set_active(tstyle.weight == TextStyle.WEIGHT_BOLD)
+                self.faintRadio.set_active(tstyle.weight == TextStyle.WEIGHT_FAINT)
             
             self._can_send_signals=True
     
@@ -424,6 +675,8 @@ class Styling(gtk.VBox):
     
     def __init__(self,*args):
         gobject.GObject.__init__(self)
+        
+        self._is_keyword_active = True
         
         mainFrame=gtk.Frame('Options')
         mainFrame.set_border_width(1)
@@ -481,11 +734,10 @@ class Styling(gtk.VBox):
         self.keywordsBox.set_active_first()
     
     def _export_current_style(self):
-        return {
-            'bgColor' : self.frameBgColors.get_color(),
-            'fgColor' : self.frameFgColors.get_color(),
-            'styles' : self.frameStyles.get_styles()
-        }
+        tstyle = self.frameStyles.get_styles()
+        tstyle.set('background',self.frameBgColors.get_color())
+        tstyle.set('foreground',self.frameFgColors.get_color())
+        return tstyle
     
     def _on_style_changed(self):
         if self.keywordsBox.is_active():
@@ -493,20 +745,26 @@ class Styling(gtk.VBox):
         print '\nstyle changed',Styling._memory[self.keywordsBox.get_active()],"\n"
         self.emit('changed')
     
-    def get_styling(self,keywordName):
-        if self.keywordsBox.is_active():
+    def get_styling(self,keywordName = None):
+        if keywordName and self.keywordsBox.is_active():
             return Styling._memory[keywordName]
         else:
             return self._export_current_style()
+    
+    def set_styling(self,tstyle):
+        self.frameBgColors.set_color(tstyle.background)
+        self.frameFgColors.set_color(tstyle.foreground)
+        self.frameStyles.set_styles(tstyle)
     
     def _on_keyword_requested(self,widget,key):
         self.emit('keyword-request',key)
     
     def _on_keyword_changed(self,keywordBox,keywordName):
         print 'keyword changed',keywordName,Styling._memory[keywordName]
-        self.frameBgColors.set_color(Styling._memory[keywordName]['bgColor'])
-        self.frameFgColors.set_color(Styling._memory[keywordName]['fgColor'])
-        self.frameStyles.set_styles(Styling._memory[keywordName]['styles'])
+        tstyle = Styling._memory[keywordName]
+        self.frameBgColors.set_color(tstyle.background)
+        self.frameFgColors.set_color(tstyle.foreground)
+        self.frameStyles.set_styles(tstyle)
     
     def set_current_keyword(self,keywordName):
         self.keywordsBox.set_active(keywordName)
@@ -515,38 +773,32 @@ class Styling(gtk.VBox):
         return self.keywordsBox.get_active()
     
     def activate_keyword(self):
+        self._is_keyword_active = True
         self.keywordsBox.activate_keyword()
         self._on_keyword_changed(self.keywordsBox,self.keywordsBox.get_active())
     
+    def is_keyword_active(self):
+        return self._is_keyword_active
+    
     def deactivate_keyword(self):
+        self._is_keyword_active = False
         self.keywordsBox.deactivate_keyword()
         
-        self.frameBgColors.set_color(-1)
-        self.frameFgColors.set_color(-1)
-        self.frameStyles.set_styles({
-            'weight' : 'normal',
-            'underline' : False,
-            'strikethrough' : False,
-            'invert' : False
-        })
+        tstyle = TextStyle()
+        tstyle.set_inconsistent('background')
+        tstyle.set_inconsistent('foreground')
+        
+        self.frameBgColors.set_color(tstyle.background)
+        self.frameFgColors.set_color(tstyle.foreground)
+        self.frameStyles.set_styles(tstyle)
     
     def __str__(self):
         return self.__unicode__().encode('utf-8')
     
     def __unicode__(self):
-        return repr(self.get_styling(self.get_current_keyword())).decode('utf-8')
+        return u'<type Styling>'+repr(self.get_styling(self.get_current_keyword())).decode('utf-8')+u'</type>'
 
 gobject.type_register(Styling)
-
-class PromptToken:
-    def __init__(self):
-        self.text=None
-        self.styling=None
-
-class PromptKeywordToken(PromptToken):
-    def __init__(self):
-        super(PromptKeywordToken,self).__init__()
-        
 
 class FormatPromptTextView(gtk.TextView):
     __gsignals__ = {
@@ -569,9 +821,9 @@ class FormatPromptTextView(gtk.TextView):
         
         table=self.buffer.get_tag_table()
         
-        for colorName in Styling.COLORNAMES:
+        for colorName,rgb in COLORNAME_TO_RGB.iteritems():
             
-            hexCode=rgb2hex(colors[colorName])
+            hexCode=rgb2hex(rgb)
             
             tag=gtk.TextTag('bg_'+colorName)
             tag.set_property('background',hexCode)
@@ -609,12 +861,21 @@ class FormatPromptTextView(gtk.TextView):
         self._has_selection = False
         self.id_has_sel=self.buffer.connect('notify::has-selection', self.on_selection_toggle)
         self.id_move_cursor=self.connect_after('move-cursor', self.on_move_cursor)
+        
         self.connect('button-release-event', self._on_mouse_button_released)
         
-        
-        self.connect('button-release-event', self.xyz)
+        self.connect('button-press-event', self.on_mouseBtn_down)
         
         self.id_buf_changed=self.buffer.connect('changed', self.on_content_change)
+    
+    def on_mouseBtn_down(self,*args):
+        print 'mouse down (has selection %s)' % self._has_selection,self.buffer.get_has_selection()
+        
+        if self._has_selection:
+            self._skip_mouse_release = True
+        else:
+            self._skip_mouse_release = False
+            
     
     def _find_keyword_pos(self,text,keywordName):
         
@@ -650,42 +911,63 @@ class FormatPromptTextView(gtk.TextView):
         tagTable=self.buffer.get_tag_table()
         tag=tagTable.lookup(keywordName)
         
-        styling = styleObj.get_styling(keywordName)
+        tstyle = styleObj.get_styling(keywordName)
         
         # XXX check if the 'invert' attribute is preserved on tag lookup
-        tag.invert = styling['styles']['invert'];
-        if styling['styles']['invert']:
-            styling['bgColor'],styling['fgColor']=styling['fgColor'],styling['bgColor']
+        print '>> change_keyword_appearance()',tstyle,tag
+        TextStyle.to_gtk_tag(tstyle,tag)
+    
+    def change_selection_appearance(self,tstyle,startIter,endIter):
+        print 'change_selection_appearance()',tstyle
         
-        background = self.__class__.DEFAULT_BACKGROUND if not styling['bgColor'] else colors[styling['bgColor']]
-        tag.set_property('background',rgb2hex(background))
+        tag_table = self.buffer.get_tag_table()
         
-        foreground = self.__class__.DEFAULT_FOREGROUND if not styling['fgColor'] else colors[styling['fgColor']]
-        tag.set_property('foreground',rgb2hex(foreground))
-        
-        tag.set_property('strikethrough',styling['styles']['strikethrough'])
-        tag.set_property('underline',styling['styles']['underline'])
-        
-        for weightName,pangoValue in (
-                 ('faint',pango.WEIGHT_ULTRALIGHT),
-                 ('normal',pango.WEIGHT_NORMAL),
-                 ('bold',pango.WEIGHT_BOLD)
-                ):
+        def get_inconsistent_tags(tstyle,tag_table):
+            tags = []
+            if tstyle.is_inconsistent('background'):
+                for colorName in COLORNAME_TO_RGB:
+                    tags.append(tag_table.lookup('bg_'+colorName))
+            if tstyle.is_inconsistent('foreground'):
+                for colorName in COLORNAME_TO_RGB:
+                    tags.append(tag_table.lookup('fg_'+colorName))
+            if tstyle.is_inconsistent('strikethrough'):
+                tags.append(tag_table.lookup('strikethrough'))
+            if tstyle.is_inconsistent('underline'):
+                tags.append(tag_table.lookup('underline'))
+            if tstyle.is_inconsistent('weight'):
+                for i in ('bold','faint','normal'):
+                    tags.append(tag_table.lookup('weight_bold'))
             
-            if weightName == styling['styles']['weight']:
-                tag.set_property('weight',pangoValue)
-                break
+            return tags
         
-    
-    def xyz(self,*args):
-        if not self._has_selection:
-            selectedKeyword = self._try_to_select_keyword(self.buffer,True)
-            if selectedKeyword: self._on_selection_changed(selectedKeyword)
-    
+        inc_tags = get_inconsistent_tags(tstyle,tag_table)
+        
+        currentIter = startIter.copy()
+        while not currentIter.equal(endIter):
+            nextIter = currentIter.copy()
+            nextIter.forward_char()
+            
+            curTags = currentIter.get_tags()
+            for singleTag in curTags:
+                if singleTag not in inc_tags:
+                    self.buffer.remove_tag(singleTag,currentIter,nextIter)
+            
+            currentIter.forward_char()
+        
+        tags = TextStyle.to_gtk_tags(tstyle,tag_table)
+        for tag in tags:
+            self.buffer.apply_tag(tag,startIter,endIter)
+        
     def _on_mouse_button_released(self,textview,event):
-        ## XXX check me
+        if self._skip_mouse_release:
+            return
+        
         if self._has_selection:
             self._on_selection_changed()
+        else:
+            selectedKeyword = self._try_to_select_keyword(self.buffer,True)
+            if selectedKeyword: self._on_selection_changed(selectedKeyword)
+        
         
     def on_move_cursor(self,textview,step_size,count,extend_selection):
         if extend_selection:
@@ -735,6 +1017,10 @@ class FormatPromptTextView(gtk.TextView):
     def _on_selection_changed(self,selectedKeyword=None):
         buffer = self.buffer
         
+        print '_on_selection_changed()',self.buffer.get_has_selection(),self.buffer.get_selection_bounds()
+        #if not self.buffer.get_has_selection():
+        #    1/0
+        
         if self._has_selection and not selectedKeyword:
             tagTable = buffer.get_tag_table()
             
@@ -778,7 +1064,7 @@ class KeywordsBox(gtk.VBox):
         align=gtk.Alignment(0,0,0,0)
         align.add(labelHelp)
         align.show()
-        self.pack_start(align,0,1,1)
+        self.pack_start(align,1,1,0)
         
         mainBox=gtk.HBox()
         
@@ -981,18 +1267,21 @@ class Window(gtk.Window):
     def on_formatPrompt_selection_change(self,textview,keywordSelected):
         try:
             start,end = textview.buffer.get_selection_bounds()
+            
             if keywordSelected:
                 self.stylingBox.activate_keyword()
                 self.stylingBox.set_current_keyword(keywordSelected)
             else:
                 self.stylingBox.deactivate_keyword()
+                tstyle = TextStyle.from_gtk_selection(start,end)
+                self.stylingBox.set_styling(tstyle)
             
         except ValueError, e:
+            print 'NO SELECTION, call stylingBox.activate_keyword()'
             self.stylingBox.activate_keyword()
     
     def convert_to_bash_and_preview(self,*args):
         return
-        
         converted=self.convert_to_bash()
         self.preview(converted)
         self.code_preview(converted)
@@ -1102,9 +1391,12 @@ class Window(gtk.Window):
             self.apply_tag_to_template(self.textview,colorName)
     
     def on_style_changed(self,stylingObj):
-        
-        keywordName=self.stylingBox.get_current_keyword()
-        self.textview.change_keyword_appearance(keywordName,stylingObj)
+        if stylingObj.is_keyword_active():
+            keywordName=self.stylingBox.get_current_keyword()
+            self.textview.change_keyword_appearance(keywordName,stylingObj)
+        else:
+            start,end  = self.textview.buffer.get_selection_bounds()
+            self.textview.change_selection_appearance(stylingObj.get_styling(),start,end)
     
     def on_delete_event(self,*args):
         gtk.main_quit()
