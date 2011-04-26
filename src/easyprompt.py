@@ -34,10 +34,10 @@ gtk.rc_parse_string(\
 colors={}
 
 colors['black']=(0,0,0)
-colors['darkblue']=(0,0,204)
-colors['darkgreen']=(0,204,0)
-colors['teal']=(0,204,204)
-colors['darkred']=(204,0,0)
+colors['blue']=(0,0,204)
+colors['green']=(0,204,0)
+colors['cyan']=(0,204,204)
+colors['red']=(204,0,0)
 colors['purple']=(204,0,204)
 colors['brown']=(204,204,0)
 colors['gray']=(170,170,170)
@@ -141,7 +141,12 @@ def rgb2hex(colorTuple):
 def hex2rgb(hexColor):
     if hexColor[0] == '#': hexColor = hexColor[1:]
     elif hexColor[0:2].lower() == '0x': hexColor = hexColor[2:]
-    if len(hexColor) < 6: hexColor = hexColor[0]+'0'+hexColor[1]+'0'+hexColor[2]+'0'
+    
+    if len(hexColor) == 3:
+        hexColor = ''.join(val for val in hexColor for i in range(2))
+    elif len(hexColor) == 12:
+        hexColor = hexColor[0]*2+hexColor[4]*2+hexColor[8]*2
+    
     return int(hexColor[0:2], 16), int(hexColor[2:4], 16), int(hexColor[4:6], 16)
 
 def get_tag_bounds(iter,tag):
@@ -197,6 +202,30 @@ class TextStyle:
         self.strikethrough = None
         self.weight = None
         self.invert = None
+    
+    def __str__(self):
+        return self.__unicode__().encode('utf-8')
+    
+    def __unicode__(self):
+        map = {}
+        if self.background:
+            if self.is_inconsistent('background'):
+                map['background'] = TextStyle.INCONSISTENT
+            else:
+                map['background'] = RGB_TO_COLORNAME[self.background]
+        
+        if self.foreground:
+            if self.is_inconsistent('foreground'):
+                map['foreground'] = TextStyle.INCONSISTENT
+            else:
+                map['foreground'] = RGB_TO_COLORNAME[self.foreground]
+        
+        if self.underline: map['underline'] = self.underline
+        if self.strikethrough: map['strikethrough'] = self.strikethrough
+        if self.weight: map['weight'] = self.weight
+        if self.invert: map['invert'] = self.invert
+        
+        return u'<TextStyle '+u' '.join(('%s="%s"' % (key,value)) for key,value in map.iteritems())+u'>'
     
     def _color_to_rgb(self,color):
         if isinstance(color,tuple): return color
@@ -334,14 +363,16 @@ class TextStyle:
         
         if getattr(tag,'invert',False):
             tstyle.set('invert',True)
-        
+        print tagName
         if tag.get_property('background-set'):
             attrName = 'foreground' if tstyle.invert else 'background'
-            tstyle.set(attrName,RGB_TO_COLORNAME[tag.get_property('background-rgb')])
+            print tag.get_property('background-gdk')
+            tstyle.set(attrName,RGB_TO_COLORNAME[hex2rgb(tag.get_property('background-gdk').to_string())])
         
         if tag.get_property('foreground-set'):
             attrName = 'background' if tstyle.invert else 'foreground'
-            tstyle.set(attrName,RGB_TO_COLORNAME[tag.get_property('foreground-rgb')])
+            print tag.get_property('foreground-gdk')
+            tstyle.set(attrName,RGB_TO_COLORNAME[hex2rgb(tag.get_property('foreground-gdk').to_string())])
         
         if tag.get_property('underline-set'):
             tstyle.set('underline',tag.get_property('underline'))
@@ -374,8 +405,11 @@ class TextStyle:
             
             for tag in currentIter.get_tags():
                 singleCharStyles.append(TextStyle.from_gtk_tag(tag))
+                print 'single char tag style', singleCharStyles[-1]
+            
             
             text_styles.append(TextStyle.merge_styles(singleCharStyles,fill_empty_properties=True))
+            print 'fusion', text_styles[-1]
             
             currentIter.forward_char()
         
@@ -394,12 +428,71 @@ class TextStyle:
                 currentValue = tstyle.get(attrName)
                 newValue = ts.get(attrName)
                 
-                if fill_empty_properties and currentValue == None:
-                    tstyle.set(attrName,newValue)
-                elif currentValue != newValue:
-                    tstyle.set_inconsistent(attrName)
+                if currentValue != newValue:
+                    
+                    if fill_empty_properties and (currentValue == None or newValue == None):
+                        tstyle.set(attrName,currentValue if newValue == None else newValue)
+                    else:
+                        tstyle.set_inconsistent(attrName)
         
         return tstyle
+    
+    @staticmethod
+    def to_bash_code(tstyle):
+        
+        codes = []
+        
+        if tstyle.weight and not tstyle.is_inconsistent('weight'):
+            codes.append({
+                TextStyle.WEIGHT_NORMAL : 0,
+                TextStyle.WEIGHT_BOLD : 1,
+                TextStyle.WEIGHT_FAINT : 2
+                }[tstyle.weight]
+            )
+        
+        if tstyle.underline and not tstyle.is_inconsistent('underline'):
+            codes.append(4)
+        
+        if tstyle.strikethrough and not tstyle.is_inconsistent('strikethrough'):
+            codes.append(9)
+        
+        background = tstyle.background if not tstyle.is_inconsistent('background') else None
+        foreground = tstyle.foreground if not tstyle.is_inconsistent('foreground') else None
+        
+        if tstyle.invert and not tstyle.is_inconsistent('invert'):
+            background, foreground = foreground, background
+            codes.append(7)
+        
+        if background:
+            codes.append({
+                'black'  : 40,
+                'red'    : 41,
+                'green'  : 42,
+                'brown'  : 43,
+                'blue'   : 44,
+                'purple' : 45,
+                'cyan'   : 46,
+                'gray'   : 47
+              }[RGB_TO_COLORNAME[background]]
+            )
+        
+        if foreground:
+            codes.append({
+                'black'  : 30,
+                'red'    : 31,
+                'green'  : 32,
+                'brown'  : 33,
+                'blue'   : 34,
+                'purple' : 35,
+                'cyan'   : 36,
+                'gray'   : 37
+              }[RGB_TO_COLORNAME[foreground]]
+            )
+        
+        if len(codes):
+            return r'\e[%sm' % ';'.join(str(x) for x in codes)
+        else:
+            return ''
 
 class Styling(gtk.VBox):
     __gsignals__ = {
@@ -410,8 +503,6 @@ class Styling(gtk.VBox):
     }
     
     _memory={}
-    
-    COLORNAMES=['black','darkblue','darkgreen','teal','darkred','purple','brown','gray']
     
     class ColorsContainer(gtk.Frame):
         __gsignals__ = {
@@ -693,11 +784,11 @@ class Styling(gtk.VBox):
         
         ### COLORS ###
         
-        self.frameBgColors=Styling.ColorsContainer('Background color',self.COLORNAMES)
+        self.frameBgColors=Styling.ColorsContainer('Background color',COLORNAME_TO_RGB.keys())
         self.frameBgColors.connect('color-selected', lambda *args: self._on_style_changed())
         self.frameBgColors.show()
         
-        self.frameFgColors=Styling.ColorsContainer('Foreground color',self.COLORNAMES)
+        self.frameFgColors=Styling.ColorsContainer('Foreground color',COLORNAME_TO_RGB.keys())
         self.frameFgColors.connect('color-selected', lambda *args: self._on_style_changed())
         self.frameFgColors.show()
         
@@ -1046,6 +1137,26 @@ class FormatPromptTextView(gtk.TextView):
         
         self.emit('selection-change',selectedKeyword)
     
+    def get_keyword_at_iter(self,current_iter):
+        
+        res = None
+        
+        for tag in current_iter.get_tags():
+            tagName = tag.get_property('name')
+            if tagName in KEYWORDS:
+                
+                startIter,endIter = get_tag_bounds(current_iter,tag)
+                
+                res = {
+                    'start' : startIter,
+                    'end'   : endIter,
+                    'keyword' : tagName
+                }
+                
+                break
+        
+        return res
+    
 
 class KeywordsBox(gtk.VBox):
     __gsignals__ = {
@@ -1194,7 +1305,7 @@ class Window(gtk.Window):
     def __init__(self):
         gtk.Window.__init__(self)
         self.set_position(gtk.WIN_POS_CENTER)
-        self.set_size_request(600,800)
+        self.set_size_request(700,800)
         self.set_border_width(5)
         self.connect('delete-event',self.on_delete_event)
 
@@ -1238,13 +1349,14 @@ class Window(gtk.Window):
         label.set_markup("<b>Generated code</b>");
         codePreviewBox.pack_start(label,0,0,2)
         self.codePreview=gtk.Label()
+        self.codePreview.set_selectable(True)
         codePreviewBox.pack_start(self.codePreview,0,0,2)
         codePreviewBox.show_all()
         vbox.pack_start(codePreviewBox,0,0,2)
         
         self.term=self.create_terminal()
         self.term.show()
-        vbox.pack_start(self.term,0,0,2)
+        vbox.pack_start(self.term,1,1,2)
         
         btn=gtk.Button('Save')
         btn.connect('clicked', lambda *x: self.write_on_disk(self.convert_to_bash()))
@@ -1274,6 +1386,7 @@ class Window(gtk.Window):
             else:
                 self.stylingBox.deactivate_keyword()
                 tstyle = TextStyle.from_gtk_selection(start,end)
+                print 'selected. style is ',tstyle
                 self.stylingBox.set_styling(tstyle)
             
         except ValueError, e:
@@ -1281,7 +1394,6 @@ class Window(gtk.Window):
             self.stylingBox.activate_keyword()
     
     def convert_to_bash_and_preview(self,*args):
-        return
         converted=self.convert_to_bash()
         self.preview(converted)
         self.code_preview(converted)
@@ -1302,60 +1414,42 @@ class Window(gtk.Window):
         
         buffer=self.textview.buffer
         
-        iter1=buffer.get_start_iter()
-
-        text=[]
-
-        last_tags=[]
-        mustReset=False
-        while 1:
-            tags=iter1.get_tags()
-            for tag in tags:
-                name=tag.get_property('name')
-                if not last_tags:
-                    text.append('\[%s\]' % codes[name])
-                    last_tags.append(name)
-                elif last_tags and not (name in last_tags):
-                    for i in last_tags[:]:
-                        if i[:3]==name[:3]=='bg_' or \
-                            (i[:3]!='bg_' and name[:3]!='bg_'): #devo cambiare back o fore ground
-                            #print 'i:',i,'name:',name,'last_tags:',last_tags
-                            #print '-',i[:3],name[:3]
-                            last_tags.remove(i)
-                            last_tags.append(name)
-                            mustReset=True
-                            break
-                    else:
-                        text.append('\[%s\]' % codes[name])
-                        last_tags.append(name)
-
-            if mustReset:
-                text.append('\[%s\]' % codes['reset'])
-                for name in last_tags:
-                     text.append('\[%s\]' % codes[name])
-                mustReset=False
-
-            if not tags and last_tags:
-                text.append('\[%s\]' % codes['reset'])
-                last_tags=[]
-            text.append(iter1.get_char().replace('\\','\\\\').replace('"','\\"'))
+        currentIter = buffer.get_start_iter()
+        endIter = buffer.get_end_iter()
+        
+        prev_bash_code = ''
+        
+        result = []
+        
+        while not currentIter.equal(endIter):
             
-            if not iter1.forward_char(): break
-        if last_tags: text.append('\[%s\]' % codes['reset'])
+            nextIter = currentIter.copy()
+            nextIter.forward_char()
+            
+            tstyle = TextStyle.from_gtk_selection(currentIter,nextIter)
+            bash_code = TextStyle.to_bash_code(tstyle)
+            
+            if bash_code != prev_bash_code:
+                prev_bash_code = bash_code
+                if bash_code == '':
+                    bash_code = r'\e[0m'
+                result.append(bash_code)
+            
+            
+            keyword_found = self.textview.get_keyword_at_iter(currentIter)
+            if keyword_found:
+                nextIter = keyword_found['end']
+                result.append(KEYWORDS[keyword_found['keyword']]['command'])
+            else:
+                result.append(currentIter.get_char())
+            
+            currentIter = nextIter
         
-        #now convert every \x1b char with the octal equivalen \033
-        line=''.join(text).replace('\x1b','\\'+str(oct(ord('\x1b'))))
-        
-        for keywordName in KEYWORDS: #convert commands in bash equivalent -> BAD use of strings. to re-write
-            line=line.replace(keywordName,KEYWORDS[keywordName]['command'])
-        
-        for module in re.findall('plug_(.+\.py)',line):
-            line=line.replace('plug_%s' % module,'\\$(python %s/%s)' % (PLUGINS_PATH,module))
-        
+        result.append(r'\e[0m')
         
         self.textview.buffer.handler_unblock(self.texviewChangedId)
         
-        return line.replace("\n","\\n")
+        return ''.join(result)
     
     def reset_colors(self):
         self.textview.buffer.handler_block(self.texviewChangedId)
@@ -1367,16 +1461,15 @@ class Window(gtk.Window):
         self.textview.buffer.emit('changed')
     
     def write_on_disk(self,line):
-        fp=file(os.path.join(CONFIG_PATH,'temp.txt'),'w')
-        fp.write(line)
-        fp.write(' ')
+        fp=file(os.path.join(os.environ['HOME'],'.bashrc'),'a')
+        fp.write('\nPS1="%s"' % line)
         fp.close()
 
         dialog=gtk.MessageDialog(self,
             gtk.DIALOG_MODAL,
             gtk.MESSAGE_INFO,
             gtk.BUTTONS_OK,
-            'ho scritto il codice in "%s"\nProvalo con PS1=`cat temp.txt`' % os.path.join(CONFIG_PATH,'temp.txt')
+            'ho aggiunto il codice in fondo a ~/.bashrc, apri un nuovo terminale o usa "source ~/.bashrc" per provarlo'
         )
         dialog.run()
         dialog.destroy()
@@ -1397,6 +1490,7 @@ class Window(gtk.Window):
         else:
             start,end  = self.textview.buffer.get_selection_bounds()
             self.textview.change_selection_appearance(stylingObj.get_styling(),start,end)
+        self.convert_to_bash_and_preview()
     
     def on_delete_event(self,*args):
         gtk.main_quit()
