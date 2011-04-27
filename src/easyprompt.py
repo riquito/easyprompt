@@ -776,7 +776,6 @@ class Styling(gtk.VBox):
         mainFrame=gtk.Frame('Options')
         mainFrame.set_border_width(1)
         
-        vbox=gtk.VBox()
         
         boxColorsAndStyle=gtk.VBox()
         
@@ -786,21 +785,7 @@ class Styling(gtk.VBox):
         self.keywordsBox.show()
         boxColorsAndStyle.pack_start(self.keywordsBox,0,0,3)
         
-        ### COLORS ###
-        
-        self.frameBgColors=Styling.ColorsContainer('Background color',COLORNAME_TO_RGB.keys())
-        self.frameBgColors.connect('color-selected', lambda *args: self._on_style_changed())
-        self.frameBgColors.show()
-        
-        self.frameFgColors=Styling.ColorsContainer('Foreground color',COLORNAME_TO_RGB.keys())
-        self.frameFgColors.connect('color-selected', lambda *args: self._on_style_changed())
-        self.frameFgColors.show()
-        
-        ### END colors ###
-        
-        boxColorsAndStyle.pack_start(self.frameBgColors,0,0,2)
-        boxColorsAndStyle.pack_start(self.frameFgColors,0,0,2)
-        
+        hbox=gtk.HBox()
         
         ### TABLE STYLES ###
         
@@ -810,13 +795,36 @@ class Styling(gtk.VBox):
         
         ### END TABLE STYLES ###
         
-        boxColorsAndStyle.pack_start(self.frameStyles,0,0,2)
+        hbox.pack_start(self.frameStyles,0,0,2)
         
-        boxColorsAndStyle.show()
-        vbox.pack_start(boxColorsAndStyle,0,0,10)
+        ### COLORS ###
+        
+        vbox = gtk.VBox()
+        
+        self.frameBgColors=Styling.ColorsContainer('Background color',COLORNAME_TO_RGB.keys())
+        self.frameBgColors.connect('color-selected', lambda *args: self._on_style_changed())
+        self.frameBgColors.show()
+        
+        self.frameFgColors=Styling.ColorsContainer('Foreground color',COLORNAME_TO_RGB.keys())
+        self.frameFgColors.connect('color-selected', lambda *args: self._on_style_changed())
+        self.frameFgColors.show()
+        
+        vbox.pack_start(self.frameBgColors,0,0,2)
+        vbox.pack_start(self.frameFgColors,0,0,2)
         
         vbox.show()
-        mainFrame.add(vbox)
+        
+        ### END colors ###
+        
+        hbox.pack_start(vbox,1,1,2)
+        hbox.show()
+        
+        boxColorsAndStyle.pack_start(hbox,0,0,2)
+        
+        boxColorsAndStyle.show()
+        #vbox.pack_start(boxColorsAndStyle,0,0,10)
+        
+        mainFrame.add(boxColorsAndStyle)
         
         mainFrame.show()
         self.pack_start(mainFrame,1,1,0)
@@ -1309,7 +1317,7 @@ class Window(gtk.Window):
     def __init__(self):
         gtk.Window.__init__(self)
         self.set_position(gtk.WIN_POS_CENTER)
-        self.set_size_request(700,800)
+        self.set_size_request(700,700)
         self.set_border_width(5)
         self.connect('delete-event',self.on_delete_event)
 
