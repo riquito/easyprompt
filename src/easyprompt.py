@@ -363,7 +363,7 @@ class TextStyle:
         
         if getattr(tag,'invert',False):
             tstyle.set('invert',True)
-        print tagName
+        
         if tag.get_property('background-set'):
             attrName = 'foreground' if tstyle.invert else 'background'
             print tag.get_property('background-gdk')
@@ -456,14 +456,10 @@ class TextStyle:
         if tstyle.strikethrough and not tstyle.is_inconsistent('strikethrough'):
             codes.append(9)
         
-        background = tstyle.background if not tstyle.is_inconsistent('background') else None
-        foreground = tstyle.foreground if not tstyle.is_inconsistent('foreground') else None
-        
         if tstyle.invert and not tstyle.is_inconsistent('invert'):
-            background, foreground = foreground, background
             codes.append(7)
         
-        if background:
+        if tstyle.background and not tstyle.is_inconsistent('background'):
             codes.append({
                 'black'  : 40,
                 'red'    : 41,
@@ -473,10 +469,10 @@ class TextStyle:
                 'purple' : 45,
                 'cyan'   : 46,
                 'gray'   : 47
-              }[RGB_TO_COLORNAME[background]]
+              }[RGB_TO_COLORNAME[tstyle.background]]
             )
         
-        if foreground:
+        if tstyle.foreground and not tstyle.is_inconsistent('foreground'):
             codes.append({
                 'black'  : 30,
                 'red'    : 31,
@@ -486,10 +482,13 @@ class TextStyle:
                 'purple' : 35,
                 'cyan'   : 36,
                 'gray'   : 37
-              }[RGB_TO_COLORNAME[foreground]]
+              }[RGB_TO_COLORNAME[tstyle.foreground]]
             )
         
+        print tstyle, 
+        
         if len(codes):
+            print r'\e[%sm' % ';'.join(str(x) for x in codes)
             return r'\e[%sm' % ';'.join(str(x) for x in codes)
         else:
             return ''
@@ -562,6 +561,8 @@ class Styling(gtk.VBox):
             self.set_label(frameTitle)
             self.set_border_width(1)
             
+            self._can_emit_toggle = True 
+            
             colorNames = ['transparent']+colorNames
             
             numColors = len(colorNames)
@@ -612,6 +613,7 @@ class Styling(gtk.VBox):
                     singleColorBox.show()
                     
                     self.colors2radio[colorName]=radioButton
+                    print colorName,radioButton
                     
                     signal_id=radioButton.connect('toggled', self._on_color_selected,colorName)
                     radioButton._signal_id=signal_id
@@ -626,7 +628,9 @@ class Styling(gtk.VBox):
             self.add(tableColors)
         
         def _on_color_selected(self,widget,colorName):
-            if not widget.get_active(): return
+            if not widget.get_active() or not self._can_emit_toggle: return
+            
+            print '_on_color_selected()'
             self.currentColor = None if colorName=='transparent' else colorName
             self.emit('color-selected', self.currentColor)
         
@@ -635,6 +639,7 @@ class Styling(gtk.VBox):
             return self.currentColor
         
         def set_color(self,color=TextStyle.INCONSISTENT):
+            print 'set_color',color
             if color == TextStyle.INCONSISTENT:
                 self.invisibleRadioBtn.set_active(True)
                 return
@@ -643,21 +648,20 @@ class Styling(gtk.VBox):
                 colorName = RGB_TO_COLORNAME[color]
             else:
                 colorName = color
-            
+            print 'setting colorname',colorName
             self.currentColor = colorName
             
             if colorName == None: colorName = 'transparent'
+            print 'now colorName is',colorName
             
-            currentRadioBtn=self.colors2radio[self.get_color() if self.get_color() else 'transparent']
             newRadioBtn=self.colors2radio[colorName]
             
-            currentRadioBtn.handler_block(currentRadioBtn._signal_id)
-            newRadioBtn.handler_block(newRadioBtn._signal_id)
+            self._can_emit_toggle = False
             
             newRadioBtn.set_active(True)
             
-            currentRadioBtn.handler_unblock(currentRadioBtn._signal_id)
-            newRadioBtn.handler_block(newRadioBtn._signal_id)
+            self._can_emit_toggle = True
+            
     
     gobject.type_register(ColorsContainer)
     
@@ -1420,7 +1424,7 @@ class Window(gtk.Window):
         prev_bash_code = ''
         
         result = []
-        
+        x = 0
         while not currentIter.equal(endIter):
             
             nextIter = currentIter.copy()
@@ -1428,7 +1432,8 @@ class Window(gtk.Window):
             
             tstyle = TextStyle.from_gtk_selection(currentIter,nextIter)
             bash_code = TextStyle.to_bash_code(tstyle)
-            
+            print x,tstyle,bash_code
+            x += 1
             if bash_code != prev_bash_code:
                 prev_bash_code = bash_code
                 if bash_code == '':
