@@ -290,6 +290,8 @@ class TextStyle:
                         tag.set_property(fakeAttrName+'-set',True)
                     
                 else:
+                    if value == None: value = False
+                    
                     tag.set_property(attrName,value)
                     tag.set_property(attrName+'-set',value)
         
@@ -780,6 +782,7 @@ class Styling(gtk.VBox):
         boxColorsAndStyle=gtk.VBox()
         
         self.keywordsBox=KeywordsBox()
+        self.keywordsBox.set_active_first()
         self.keywordsBox.connect('keyword-changed',self._on_keyword_changed)
         self.keywordsBox.connect('keyword-request',self._on_keyword_requested)
         self.keywordsBox.show()
@@ -829,12 +832,22 @@ class Styling(gtk.VBox):
         mainFrame.show()
         self.pack_start(mainFrame,1,1,0)
         
+        """
         from copy import deepcopy
         baseStyle=self._export_current_style()
         for keywordName in KEYWORDS:
             Styling._memory[keywordName]=deepcopy(baseStyle)
+        """
+        self.reset()
+    
+    def reset(self):
+        from copy import deepcopy
         
-        self.keywordsBox.set_active_first()
+        for keywordName in KEYWORDS:
+            Styling._memory[keywordName]=TextStyle()
+        
+        self.set_current_keyword(self.get_current_keyword())    
+        self.emit('changed')
     
     def _export_current_style(self):
         tstyle = self.frameStyles.get_styles()
@@ -909,6 +922,8 @@ class FormatPromptTextView(gtk.TextView):
                 (gobject.TYPE_BOOLEAN,)),
         'selection-change' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
                 (gobject.TYPE_PYOBJECT,)),
+        'changed': (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
+                ()),
     }
     
     DEFAULT_BACKGROUND=(0,0,0)
@@ -1008,6 +1023,8 @@ class FormatPromptTextView(gtk.TextView):
                                  keywordName,
                                  buffer.get_iter_at_offset(start),
                                  buffer.get_iter_at_offset(end))
+        
+        self.emit('changed')
     
     def change_keyword_appearance(self,keywordName,styleObj):
         
@@ -1070,7 +1087,12 @@ class FormatPromptTextView(gtk.TextView):
         else:
             selectedKeyword = self._try_to_select_keyword(self.buffer,True)
             if selectedKeyword: self._on_selection_changed(selectedKeyword)
-        
+    
+    def reset_colors(self):
+        self.buffer.handler_block(self.id_buf_changed)
+        self.buffer.remove_all_tags(*self.buffer.get_bounds())
+        self.buffer.handler_unblock(self.id_buf_changed)
+        self.buffer.emit('changed')
         
     def on_move_cursor(self,textview,step_size,count,extend_selection):
         if extend_selection:
@@ -1340,14 +1362,16 @@ class Window(gtk.Window):
         vbox.pack_start(self.checkBtn,0,0,2)
         
         btn=gtk.Button('Reset colors')
-        btn.connect('clicked', lambda *x: self.reset_colors())
         btn.show()
         vbox.pack_start(btn,0,0,2)
         
         self.textview=FormatPromptTextView()
         self.textview.connect('selection-change',self.on_formatPrompt_selection_change)
-        self.texviewChangedId=self.textview.buffer.connect('changed',self.convert_to_bash_and_preview)
+        self.textview.connect('changed',self.convert_to_bash_and_preview)
         self.textview.show()
+        
+        btn.connect('clicked', lambda *x: self.stylingBox.reset())
+        btn.connect('clicked', lambda *x: self.textview.reset_colors())
         
         sw = gtk.ScrolledWindow()
         sw.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
@@ -1422,8 +1446,6 @@ class Window(gtk.Window):
     
     def convert_to_bash(self):
         
-        self.textview.buffer.handler_block(self.texviewChangedId)
-        
         buffer=self.textview.buffer
         
         currentIter = buffer.get_start_iter()
@@ -1460,18 +1482,7 @@ class Window(gtk.Window):
         
         result.append(r'\e[0m')
         
-        self.textview.buffer.handler_unblock(self.texviewChangedId)
-        
         return ''.join(result)
-    
-    def reset_colors(self):
-        self.textview.buffer.handler_block(self.texviewChangedId)
-        self.textview.buffer.set_text(self.textview.buffer.get_text(
-            self.textview.buffer.get_start_iter(),
-            self.textview.buffer.get_end_iter()
-        ))
-        self.textview.buffer.handler_unblock(self.texviewChangedId)
-        self.textview.buffer.emit('changed')
     
     def write_on_disk(self,line):
         fp=file(os.path.join(os.environ['HOME'],'.bashrc'),'a')
