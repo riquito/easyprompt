@@ -132,10 +132,12 @@ KEYWORDS={
 
 
 def rgb2hex(colorTuple):
+    print 'from',colorTuple
     esa=['#']
     for col in colorTuple:
         ascii=str(hex(col))
         esa.append(len(ascii)==4 and ascii[-2:] or ('0'+ascii[-1:]))
+    print 'to',''.join(esa)
     return ''.join(esa)
 
 def hex2rgb(hexColor):
@@ -552,8 +554,9 @@ class Styling(gtk.VBox):
                 cr.stroke()
             
             def _paint_color(self, cr, width, height):
-                # Fill the background with white
-                cr.set_source_rgb(*self.color)
+                print 'paint color',cr,self.color
+                #cr.set_source_rgb(*self.color)
+                cr.set_source_color(gtk.gdk.color_parse(rgb2hex(self.color)))
                 cr.rectangle(0, 0, width, height)
                 cr.fill()
         
@@ -593,6 +596,7 @@ class Styling(gtk.VBox):
                     if colorName == 'transparent':
                         singleColorPreview=Styling.ColorsContainer.ColorPreview(None)
                     else:
+                        print colorName, colors[colorName]
                         singleColorPreview=Styling.ColorsContainer.ColorPreview(colors[colorName])
                     
                     singleColorPreview.show()
@@ -804,6 +808,8 @@ class Styling(gtk.VBox):
         
         vbox = gtk.VBox()
         
+        print COLORNAME_TO_RGB.keys()
+        
         self.frameBgColors=Styling.ColorsContainer('Background color',COLORNAME_TO_RGB.keys())
         self.frameBgColors.connect('color-selected', lambda *args: self._on_style_changed())
         self.frameBgColors.show()
@@ -890,13 +896,14 @@ class Styling(gtk.VBox):
     
     def activate_keyword(self):
         self._is_keyword_active = True
+        self.frameStyles.set_sensitive(True)
         self.keywordsBox.activate_keyword()
         self._on_keyword_changed(self.keywordsBox,self.keywordsBox.get_active())
     
     def is_keyword_active(self):
         return self._is_keyword_active
     
-    def deactivate_keyword(self):
+    def deactivate_keyword(self,keepOnlyColors = False):
         self._is_keyword_active = False
         self.keywordsBox.deactivate_keyword()
         
@@ -907,6 +914,9 @@ class Styling(gtk.VBox):
         self.frameBgColors.set_color(tstyle.background)
         self.frameFgColors.set_color(tstyle.foreground)
         self.frameStyles.set_styles(tstyle)
+        
+        if keepOnlyColors:
+            self.frameStyles.set_sensitive(False)
     
     def __str__(self):
         return self.__unicode__().encode('utf-8')
@@ -993,6 +1003,19 @@ class FormatPromptTextView(gtk.TextView):
             self._skip_mouse_release = True
         else:
             self._skip_mouse_release = False
+    
+    def change_base_colors(self,tstyle):
+        if not tstyle.is_inconsistent('background'):
+            if tstyle.background:
+                self.modify_base(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(tstyle.background)))
+            else:
+                self.modify_base(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(FormatPromptTextView.DEFAULT_BACKGROUND)))
+        
+        if not tstyle.is_inconsistent('foreground'):
+            if tstyle.foreground:
+                self.modify_text(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(tstyle.foreground)))
+            else:
+                self.modify_text(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(FormatPromptTextView.DEFAULT_FOREGROUND)))
             
     
     def _find_keyword_pos(self,text,keywordName):
@@ -1357,21 +1380,15 @@ class Window(gtk.Window):
         topBox.show()
         vbox.pack_start(topBox,0,0,2)
         
-        self.checkBtn=gtk.CheckButton('usa i colori per modificare sfondo e colore del testo di EasyPrompt')
-        self.checkBtn.show()
-        vbox.pack_start(self.checkBtn,0,0,2)
-        
-        btn=gtk.Button('Reset colors')
-        btn.show()
-        vbox.pack_start(btn,0,0,2)
+        self.baseColorsCheckBtn=gtk.CheckButton('usa i colori per modificare sfondo e colore del testo di EasyPrompt')
+        self.baseColorsCheckBtn.connect('toggled',self.on_checkBtn_baseColors_clicked)
+        self.baseColorsCheckBtn.show()
+        vbox.pack_start(self.baseColorsCheckBtn,0,0,2)
         
         self.textview=FormatPromptTextView()
         self.textview.connect('selection-change',self.on_formatPrompt_selection_change)
         self.textview.connect('changed',self.convert_to_bash_and_preview)
         self.textview.show()
-        
-        btn.connect('clicked', lambda *x: self.stylingBox.reset())
-        btn.connect('clicked', lambda *x: self.textview.reset_colors())
         
         sw = gtk.ScrolledWindow()
         sw.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
@@ -1381,6 +1398,13 @@ class Window(gtk.Window):
         vbox.pack_start(sw,0,0,2)
         
         codePreviewBox=gtk.HBox()
+        
+        btn=gtk.Button('Reset')
+        btn.show()
+        btn.connect('clicked', lambda *x: self.stylingBox.reset())
+        btn.connect('clicked', lambda *x: self.textview.reset_colors())
+        codePreviewBox.pack_start(btn,0,0,2)
+        
         label=gtk.Label()
         label.set_markup("<b>Generated code</b>");
         codePreviewBox.pack_start(label,0,0,2)
@@ -1406,6 +1430,12 @@ class Window(gtk.Window):
         
         self.show()
     
+    def on_checkBtn_baseColors_clicked(self,btn):
+        if btn.get_active():
+            self.stylingBox.deactivate_keyword(True)
+        else:
+            self.stylingBox.activate_keyword()
+    
     def create_terminal(self):
         term=shell.ShellWidget()
         term.loadColors(shell.getGnomeTerminalColors())
@@ -1413,6 +1443,9 @@ class Window(gtk.Window):
         return term
     
     def on_formatPrompt_selection_change(self,textview,keywordSelected):
+        if self.baseColorsCheckBtn.get_active():
+            return
+        
         try:
             start,end = textview.buffer.get_selection_bounds()
             
@@ -1512,8 +1545,12 @@ class Window(gtk.Window):
             keywordName=self.stylingBox.get_current_keyword()
             self.textview.change_keyword_appearance(keywordName,stylingObj)
         else:
-            start,end  = self.textview.buffer.get_selection_bounds()
-            self.textview.change_selection_appearance(stylingObj.get_styling(),start,end)
+            tstyle = stylingObj.get_styling()
+            if self.baseColorsCheckBtn.get_active():
+                self.textview.change_base_colors(tstyle)
+            else:
+                start,end  = self.textview.buffer.get_selection_bounds()
+                self.textview.change_selection_appearance(tstyle,start,end)
         self.convert_to_bash_and_preview()
     
     def on_delete_event(self,*args):
