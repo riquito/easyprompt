@@ -1560,6 +1560,19 @@ class Window(gtk.Window):
             tstyle = stylingObj.get_styling()
             if self.baseColorsCheckBtn.get_active():
                 self.textview.change_base_colors(tstyle)
+                print tstyle
+                if tstyle.background:
+                    if not tstyle.is_inconsistent('background'):
+                        self.term.set_color_background(gtk.gdk.color_parse(rgb2hex(tstyle.background)))
+                else:
+                    self.term.set_color_background(gtk.gdk.color_parse(rgb2hex(FormatPromptTextView.DEFAULT_BACKGROUND)))
+                
+                if tstyle.foreground:
+                    if not tstyle.is_inconsistent('foreground'):
+                        self.term.set_color_foreground(gtk.gdk.color_parse(rgb2hex(tstyle.foreground)))
+                else:
+                    self.term.set_color_foreground(gtk.gdk.color_parse(rgb2hex(FormatPromptTextView.DEFAULT_FOREGROUND)))
+                
             else:
                 start,end  = self.textview.buffer.get_selection_bounds()
                 self.textview.change_selection_appearance(tstyle,start,end)
