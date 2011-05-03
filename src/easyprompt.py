@@ -51,82 +51,82 @@ KEYWORDS={
     'dateLong': {
         'command':'$(date +"%d %b %Y")',
         'help':'data nel formato %d/%b/%Y',
-        'example':'<b>28 Feb 2004</b> foo@mypc /var/log'
+        'example':'<span underline="double" color="red">28 Feb 2004</span> foo@mypc /var/log'
     },
     'dateShort': {
         'command':'$(date +"%d/%m/%y")',
         'help':'data nel formato %d/%m/%y',
-        'example':'<b>28/02/04</b> foo@mypc /var/log'
+        'example':'<span underline="double" color="red">28/02/04</span> foo@mypc /var/log'
     },
     'hourLong': {
         'command':'$(date +"%H:%M:%S")',
         'help':'ora nel formato %H:%M:%S',
-        'example':'<b>15:23:59</b> foo@mypc /var/log'
+        'example':'<span underline="double" color="red">15:23:59</span> foo@mypc /var/log'
     },
     'hourShort': {
         'command':'$(date +"%H:%M")',
         'help':'ora nel formato %H:%M',
-        'example':'<b>15:23</b> foo@mypc /var/log'
+        'example':'<span underline="double" color="red">15:23</span> foo@mypc /var/log'
     },
     'host': {
         'command':r'\h',
         'help':'hostname fino al primo punto',
-        'example':'foo@<b>mypc</b> /var/log'
+        'example':'foo@<span underline="double" color="red">mypc</span> /var/log'
     },
     'user': {
         'command':r'\u',
         'help':'utente corrente',
-        'example':'<b>foo</b>@mypc /var/log'
+        'example':'<span underline="double" color="red">foo</span>@mypc /var/log'
     },
     'newline': {
         'command':r'\n',
         'help':'a capo',
-        'example':'foo@mypc /var/log <b>↵</b> $'
+        'example':'foo@mypc /var/log <span underline="double" color="red">↵</span> $'
     },
     'shell': {
         'command':r'\s',
         'help':'nome della shell',
-        'example':'foo@mypc <b>bash</b> /var/log  $'
+        'example':'foo@mypc <span underline="double" color="red">bash</span> /var/log  $'
     },
     'version': {
         'command':r'\v',
         'help':'versione della shell',
-        'example':'foo@mypc <b>4.2</b> /var/log  $'
+        'example':'foo@mypc <span underline="double" color="red">4.2</span> /var/log  $'
     },
     'release': {
         'command':r'\V',
         'help':'release della shell (versione + numero di patch)',
-        'example':'foo@mypc <b>4.2.8</b> /var/log  $'
+        'example':'foo@mypc <span underline="double" color="red">4.2.8</span> /var/log  $'
     },
     'abs_pwd': {
         'command':r'\w',
         'help':'path completa',
-        'example':'foo@mypc <b>/var/log</b> $'
+        'example':'foo@mypc <span underline="double" color="red">/var/log</span> $'
     },
     'base_pwd': {
         'command':r'\W',
         'help':'directory corrente',
-        'example':'foo@mypc <b>log</b> $'
+        'example':'foo@mypc <span underline="double" color="red">log</span> $'
     },
     'history_num': {
         'command':r'\!',
         'help':'il numero nella cronologia del comando attuale',
-        'example':'<b>508</b> foo@mypc /var/log $ cd\n<b>509</b> foo@mypc ~ $'
+        'example':'<span underline="double" color="red">508</span> foo@mypc /var/log $ cd\n<span underline="double" color="red">509</span> foo@mypc ~ $'
     },
     'cmd_num': {
         'command':r'\#',
         'help':'il numero di comando del comando attuale',
-        'example':'<b>3</b> foo@mypc /var/log $ echo "hello"\nhello\n<b>4</b> foo@mypc /var/log $'
+        'example':'<span underline="double" color="red">3</span> foo@mypc /var/log $ echo "hello"\nhello\n<span underline="double" color="red">4</span> foo@mypc /var/log $'
     },
     'prompt': {
         'command':r'\$',
         'help':'# se root, $ altrimenti',
-        'example':'foo@mypc /var/log <b>$</b> sudo su -\nroot@mypc ~ <b>#</b>'
+        'example':'foo@mypc /var/log <span underline="double" color="red">$</span> sudo su -\nroot@mypc ~ <span underline="double" color="red">#</span>'
     },
     'backslash': {
         'command':r'\\',
         'help':'un backslash \\',
-        'example':'foo<b>\\</b>mypc /var/log $'
+        'example':'foo<span underline="double" color="red">\\</span>mypc /var/log $'
     },
 }
 
@@ -1302,13 +1302,6 @@ class KeywordsBox(gtk.VBox):
         
         helpBox=gtk.VBox()
         
-        self.exampleLabel=gtk.Label()
-        self.exampleLabel.show()
-        align = gtk.Alignment(0,0,0,0)
-        align.add(self.exampleLabel)
-        align.show()
-        helpBox.pack_start(align)
-        
         self.descLabel=gtk.Label()
         self.descLabel.show()
         self.descLabel.set_justify(gtk.JUSTIFY_LEFT)
@@ -1316,6 +1309,13 @@ class KeywordsBox(gtk.VBox):
         align.add(self.descLabel)
         align.show()
         
+        helpBox.pack_start(align)
+        
+        self.exampleLabel=gtk.Label()
+        self.exampleLabel.show()
+        align = gtk.Alignment(0,0,0,0)
+        align.add(self.exampleLabel)
+        align.show()
         helpBox.pack_start(align)
         
         
@@ -1331,8 +1331,20 @@ class KeywordsBox(gtk.VBox):
     def _on_combobox_changed(self,combobox):
         keywordName=self.get_active()
         keywordData=KEYWORDS[keywordName]
-        self.exampleLabel.set_markup(keywordData['example'])
-        self.descLabel.set_text(keywordData['help'])
+        
+        ### XXX follows an ugly hack to have a fixed height help zone
+        ### It needs to be fixed: the sooner the better
+        
+        descText = keywordData['help']
+        
+        exampleText = keywordData['example']
+        exampleLines = 1 + exampleText.count('\n')
+        if exampleLines < 3:
+            exampleText+= '\n'*(3-exampleLines)
+        
+        self.descLabel.set_text(descText)
+        self.exampleLabel.set_markup('<span background="black" foreground="white">'+exampleText+"</span>")
+        
         self.emit('keyword-changed',keywordName)
     
     def get_active(self):
