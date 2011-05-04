@@ -132,12 +132,10 @@ KEYWORDS={
 
 
 def rgb2hex(colorTuple):
-    print 'from',colorTuple
     esa=['#']
     for col in colorTuple:
         ascii=str(hex(col))
         esa.append(len(ascii)==4 and ascii[-2:] or ('0'+ascii[-1:]))
-    print 'to',''.join(esa)
     return ''.join(esa)
 
 def hex2rgb(hexColor):
@@ -518,7 +516,7 @@ class Styling(gtk.VBox):
             # Draw in response to an expose-event
             __gsignals__ = { "expose-event": "override" }
             
-            def __init__(self,colorTuple=None):
+            def __init__(self,func_bright,colorTuple=None):
                 super(Styling.ColorsContainer.ColorPreview,self).__init__()
                 
                 self.set_size_request(20,20)
@@ -528,6 +526,8 @@ class Styling(gtk.VBox):
                     self.draw=self._paint_color
                 else:
                     self.draw=self._paint_transparent
+                
+                self.get_color_brightness = func_bright
         
             # Handle the expose-event by drawing
             def do_expose_event(self, event):
@@ -554,9 +554,17 @@ class Styling(gtk.VBox):
                 cr.stroke()
             
             def _paint_color(self, cr, width, height):
-                print 'paint color',cr,self.color
-                #cr.set_source_rgb(*self.color)
-                cr.set_source_color(gtk.gdk.color_parse(rgb2hex(self.color)))
+                
+                def get_if_less_than_max(x,max=255):
+                    return x if x < max else max;
+                
+                br = self.get_color_brightness()
+                
+                r,g,b = (int(round(get_if_less_than_max(x* {'dark':0.7,'normal':1,'bright':1.4}[br]))) for x in self.color)
+                
+                cr.set_source_color(gtk.gdk.color_parse(rgb2hex((r,g,b))))
+                #cr.set_source_rgb(r,g,b)
+                
                 cr.rectangle(0, 0, width, height)
                 cr.fill()
         
@@ -566,7 +574,8 @@ class Styling(gtk.VBox):
             self.set_label(frameTitle)
             self.set_border_width(1)
             
-            self._can_emit_toggle = True 
+            self._can_emit_toggle = True
+            self.color_brightness = 'normal'
             
             colorNames = ['transparent']+colorNames
             
@@ -583,6 +592,9 @@ class Styling(gtk.VBox):
             self.currentColor = None
             self.colors2radio={}
             
+            def get_color_brigthness():
+                return self.color_brightness
+            
             for row in range(rows):
                 for col in range(columns):
                     
@@ -594,10 +606,10 @@ class Styling(gtk.VBox):
                     littleFrame.set_border_width(2)
                     
                     if colorName == 'transparent':
-                        singleColorPreview=Styling.ColorsContainer.ColorPreview(None)
+                        singleColorPreview=Styling.ColorsContainer.ColorPreview(get_color_brigthness,None)
                     else:
                         print colorName, colors[colorName]
-                        singleColorPreview=Styling.ColorsContainer.ColorPreview(colors[colorName])
+                        singleColorPreview=Styling.ColorsContainer.ColorPreview(get_color_brigthness,colors[colorName])
                     
                     singleColorPreview.show()
                     
@@ -639,6 +651,10 @@ class Styling(gtk.VBox):
             print '_on_color_selected()'
             self.currentColor = None if colorName=='transparent' else colorName
             self.emit('color-selected', self.currentColor)
+        
+        def set_color_brightness(self,brightness):
+            self.color_brightness = brightness
+            self.queue_draw()
         
         def get_color(self):
             '''Return the color name'''
@@ -838,12 +854,6 @@ class Styling(gtk.VBox):
         mainFrame.show()
         self.pack_start(mainFrame,1,1,0)
         
-        """
-        from copy import deepcopy
-        baseStyle=self._export_current_style()
-        for keywordName in KEYWORDS:
-            Styling._memory[keywordName]=deepcopy(baseStyle)
-        """
         self.reset()
     
     def reset(self):
@@ -862,9 +872,13 @@ class Styling(gtk.VBox):
         return tstyle
     
     def _on_style_changed(self):
+        tstyle = self._export_current_style()
         if self.keywordsBox.is_active():
-            Styling._memory[self.keywordsBox.get_active()]=self._export_current_style()
+            Styling._memory[self.keywordsBox.get_active()]= tstyle
         print '\nstyle changed',Styling._memory[self.keywordsBox.get_active()],"\n"
+        
+        self.frameFgColors.set_color_brightness({'normal':'normal','bold':'bright','faint':'dark'}[tstyle.weight])
+        
         self.emit('changed')
     
     def get_styling(self,keywordName = None):
@@ -1560,7 +1574,7 @@ class Window(gtk.Window):
             tstyle = stylingObj.get_styling()
             if self.baseColorsCheckBtn.get_active():
                 self.textview.change_base_colors(tstyle)
-                print tstyle
+                
                 if tstyle.background:
                     if not tstyle.is_inconsistent('background'):
                         self.term.set_color_background(gtk.gdk.color_parse(rgb2hex(tstyle.background)))
