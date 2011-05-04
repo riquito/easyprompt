@@ -1539,9 +1539,14 @@ class Window(gtk.Window):
             
             currentIter = nextIter
         
-        result.append(r'\e[0m')
         
-        return ''.join(result)
+        bash_ps1 = ''.join(result)
+        
+        idx = bash_ps1.rfind(r'\e[')
+        if idx != -1 and not bash_ps1[idx:].startswith(r'\e[0m'):
+            bash_ps1 += r'\e[0m'
+        
+        return bash_ps1
     
     def write_on_disk(self,line):
         fp=file(os.path.join(os.environ['HOME'],'.bashrc'),'a')
