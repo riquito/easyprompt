@@ -1637,6 +1637,7 @@ class Window(gtk.Window):
         self.code_preview(converted)
     
     def preview(self,prompt_format):
+        print '>>>',repr(prompt_format)
         self.term.set_prompt(prompt_format)
         self.term.clear()
     
@@ -1656,7 +1657,6 @@ class Window(gtk.Window):
         prev_bash_code = ''
         
         result = []
-        x = 0
         while not currentIter.equal(endIter):
             
             nextIter = currentIter.copy()
@@ -1664,8 +1664,7 @@ class Window(gtk.Window):
             
             tstyle = TextStyle.from_gtk_selection(currentIter,nextIter)
             bash_code = TextStyle.to_bash_code(tstyle)
-            print x,tstyle,bash_code
-            x += 1
+            
             if bash_code != prev_bash_code:
                 prev_bash_code = bash_code
                 if bash_code == '':
@@ -1689,6 +1688,18 @@ class Window(gtk.Window):
         if idx != -1 and not bash_ps1[idx:].startswith(r'\e[0m'):
             bash_ps1 += r'\e[0m'
         
+        
+        # XXX remove any ending backslash until I find the right way to handle it
+        bash_ps1 = re.sub(r'\\+$','',bash_ps1)
+        
+        '''
+        match = re.match(r'\\+$',bash_ps1)
+        if match:
+            numBackslashes = len(match.group(0))
+            bash_ps1 = r'\\'*(numBackslashes-1) + '\\\\'
+        '''
+        
+        print '__',repr(bash_ps1)
         return bash_ps1
     
     def write_on_disk(self,line):
