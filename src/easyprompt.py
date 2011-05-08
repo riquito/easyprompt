@@ -46,6 +46,33 @@ COLORNAME_TO_RGB = colors
 RGB_TO_COLORNAME = dict((a,b) for b,a in COLORNAME_TO_RGB.iteritems())
 
 
+COLORS_8_FOREGROUND_FROM_NAME_TO_INT = {
+    'black'  : 30,
+    'red'    : 31,
+    'green'  : 32,
+    'brown'  : 33,
+    'blue'   : 34,
+    'purple' : 35,
+    'cyan'   : 36,
+    'gray'   : 37
+}
+
+COLORS_8_BACKGROUND_FROM_NAME_TO_INT = {
+    'black'  : 40,
+    'red'    : 41,
+    'green'  : 42,
+    'brown'  : 43,
+    'blue'   : 44,
+    'purple' : 45,
+    'cyan'   : 46,
+    'gray'   : 47
+}
+
+COLORS_8_FROM_INT_TO_NAME = {}
+for name,val in COLORS_8_FOREGROUND_FROM_NAME_TO_INT.iteritems():
+    COLORS_8_FROM_INT_TO_NAME[val]=name
+for name,val in COLORS_8_BACKGROUND_FROM_NAME_TO_INT.iteritems():
+    COLORS_8_FROM_INT_TO_NAME[val]=name
 
 KEYWORDS={
     'dateLong': {
@@ -487,13 +514,37 @@ class TextStyle:
               }[RGB_TO_COLORNAME[tstyle.foreground]]
             )
         
-        print tstyle, 
-        
         if len(codes):
-            print r'\e[%sm' % ';'.join(str(x) for x in codes)
             return r'\e[%sm' % ';'.join(str(x) for x in codes)
         else:
             return ''
+        
+    @staticmethod
+    def from_bash_code_values(values):
+        tstyle = TextStyle()
+        
+        for val in values:
+            
+            if val == 0:
+                tstyle.weight = TextStyle.WEIGHT_NORMAL
+            elif val == 1:
+                tstyle.weight = TextStyle.WEIGHT_BOLD
+            elif val == 2:
+                tstyle.weight = TextStyle.WEIGHT_FAINT
+            elif val == 4:
+                tstyle.underline = True
+            elif val == 7:
+                tstyle.invert = True
+            elif val == 9:
+                tstyle.strikethrough = True
+            elif 30 <= val <= 37:
+                name = COLORS_8_FROM_INT_TO_NAME[val]
+                tstyle.foreground = COLORNAME_TO_RGB[name]
+            elif 40 <= val <= 47:
+                name = COLORS_8_FROM_INT_TO_NAME[val]
+                tstyle.background = COLORNAME_TO_RGB[name]
+        
+        return tstyle
 
 class Styling(gtk.VBox):
     __gsignals__ = {
@@ -1391,7 +1442,7 @@ class Window(gtk.Window):
         self.set_size_request(700,700)
         self.set_border_width(5)
         self.connect('delete-event',self.on_delete_event)
-
+        
         vbox=gtk.VBox()
         
         topBox=gtk.VBox()
@@ -1402,7 +1453,6 @@ class Window(gtk.Window):
         self.stylingBox.show()
         topBox.pack_start(self.stylingBox,0,0,2)
         
-        
         topBox.show()
         vbox.pack_start(topBox,0,0,2)
         
@@ -1411,9 +1461,11 @@ class Window(gtk.Window):
         self.baseColorsCheckBtn.show()
         vbox.pack_start(self.baseColorsCheckBtn,0,0,2)
         
+        txtBox=gtk.HBox()
+        
         self.textview=FormatPromptTextView()
-        self.textview.connect('selection-change',self.on_formatPrompt_selection_change)
-        self.textview.connect('changed',self.convert_to_bash_and_preview)
+        self.fpt_sel_changed_id=self.textview.connect('selection-change',self.on_formatPrompt_selection_change)
+        self.fpt_changed_id=self.textview.connect('changed',self.convert_to_bash_and_preview)
         self.textview.show()
         
         sw = gtk.ScrolledWindow()
@@ -1421,7 +1473,19 @@ class Window(gtk.Window):
         sw.add(self.textview)
         sw.show()
         
-        vbox.pack_start(sw,0,0,2)
+        txtBox.pack_start(sw,1,1,2)
+        
+        tmpVBox = gtk.VBox()
+        btn=gtk.Button('Import...')
+        btn.show()
+        btn.connect('clicked', self.on_importBtn_clicked)
+        tmpVBox.pack_start(btn,0,0,0)
+        tmpVBox.show()
+        
+        txtBox.pack_start(tmpVBox,0,0,2)
+        txtBox.show()
+        
+        vbox.pack_start(txtBox,0,0,2)
         
         codePreviewBox=gtk.HBox()
         
@@ -1452,9 +1516,88 @@ class Window(gtk.Window):
         vbox.show()
         self.add(vbox)
         
-        self.textview.set_size_request(-1,self.textview.get_line_yrange(self.textview.buffer.get_start_iter())[1]*3)
+        txtBox.set_size_request(-1,self.textview.get_line_yrange(self.textview.buffer.get_start_iter())[1]*3)
+        
+        self.set_prompt_from_bash_string(self.get_system_prompt())
         
         self.show()
+    
+    def get_system_prompt(self):
+        return os.environ.get('PS1','')
+    
+    def set_prompt_from_bash_string(self,bash_code):
+        self.textview.handler_block(self.fpt_sel_changed_id)
+        self.textview.handler_block(self.fpt_changed_id)
+        
+        buffer = self.textview.buffer
+        tag_table = buffer.get_tag_table()
+        
+        buffer.set_text('')
+        
+        bash_code  = re.sub(r'(\\\[|\\\])','',bash_code) # strip \[ and \]
+        
+        ### this is incredibly inefficient ###
+        for keywordName in KEYWORDS:
+            bash_code = bash_code.replace(KEYWORDS[keywordName]["command"],keywordName)
+        ### ###
+        
+        pattern = re.compile(r'(?:\\033|\\e)\[((?:\d*[;m])*)')
+        
+        tstyles = []
+        for groupMatch in pattern.findall(bash_code):
+            
+            groupMatch = groupMatch[:-1]
+            
+            if groupMatch == '':
+                tstyles.append(TextStyle())
+            else:
+                tstyles.append(TextStyle.from_bash_code_values(int(x) for x in groupMatch.split(';')))
+        
+        parts = pattern.split(bash_code) # having groups, splitting contains the splitting part too at even indexes
+        
+        buffer.insert(buffer.get_end_iter(),parts[0])
+        for i in range(1,len(parts)-1,2):
+            currentIter = buffer.get_end_iter()
+            tstyle = tstyles[(i-1)/2]
+            buffer.insert_with_tags(currentIter,parts[i+1],*TextStyle.to_gtk_tags(tstyle,tag_table))
+        
+        self.textview.handler_unblock(self.fpt_sel_changed_id)
+        self.textview.handler_unblock(self.fpt_changed_id)
+    
+    def on_importBtn_clicked(self,btn):
+        
+        def on_entry_activated(entry,dialog):
+            dialog.response(gtk.RESPONSE_OK)
+        
+        dialog = gtk.MessageDialog(
+            self,
+            gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
+            gtk.MESSAGE_QUESTION,
+            gtk.BUTTONS_OK_CANCEL,
+            None
+        )
+        
+        dialog.set_markup('Please enter your bash prompt code:')
+        entry = gtk.Entry()
+        entry.connect("activate",on_entry_activated,dialog)
+        
+        hbox = gtk.HBox()
+        hbox.pack_start(gtk.Label("Name:"), False, 5, 5)
+        hbox.pack_end(entry)
+        
+        dialog.format_secondary_markup("This will be used for <i>identification</i> purposes")
+        
+        dialog.vbox.pack_end(hbox, True, True, 0)
+        dialog.show_all()
+        
+        response = dialog.run()
+        
+        text = entry.get_text()
+        dialog.destroy()
+        
+        if response == gtk.RESPONSE_OK:
+            self.set_prompt_from_bash_string(text)
+        
     
     def on_checkBtn_baseColors_clicked(self,btn):
         if btn.get_active():
