@@ -1052,6 +1052,7 @@ class FormatPromptTextView(gtk.TextView):
         
         # add selection change capabilities
         self._has_selection = False
+        self._skip_mouse_release = False
         self.id_has_sel=self.buffer.connect('notify::has-selection', self.on_selection_toggle)
         self.id_move_cursor=self.connect_after('move-cursor', self.on_move_cursor)
         
@@ -1062,8 +1063,6 @@ class FormatPromptTextView(gtk.TextView):
         self.id_buf_changed=self.buffer.connect('changed', self.on_content_change)
     
     def on_mouseBtn_down(self,*args):
-        print 'mouse down (has selection %s)' % self._has_selection,self.buffer.get_has_selection()
-        
         if self._has_selection:
             self._skip_mouse_release = True
         else:
@@ -1122,11 +1121,9 @@ class FormatPromptTextView(gtk.TextView):
         tstyle = styleObj.get_styling(keywordName)
         
         # XXX check if the 'invert' attribute is preserved on tag lookup
-        print '>> change_keyword_appearance()',tstyle,tag
         TextStyle.to_gtk_tag(tstyle,tag)
     
     def change_selection_appearance(self,tstyle,startIter,endIter):
-        print 'change_selection_appearance()',tstyle
         
         tag_table = self.buffer.get_tag_table()
         
@@ -1167,10 +1164,7 @@ class FormatPromptTextView(gtk.TextView):
             self.buffer.apply_tag(tag,startIter,endIter)
         
     def _on_mouse_button_released(self,textview,event):
-        if self._skip_mouse_release:
-            return
-        
-        if self._has_selection:
+        if not self._skip_mouse_release and self._has_selection:
             self._on_selection_changed()
         else:
             selectedKeyword = self._try_to_select_keyword(self.buffer,True)
@@ -1196,26 +1190,39 @@ class FormatPromptTextView(gtk.TextView):
             self._on_selection_changed(selectedKeyword)
     
     def _try_to_select_keyword(self,buffer,move_left_to_right):
+        
         self.handler_block(self.id_move_cursor)
         
         selectedKeyword = None
+        current_iter = buffer.get_iter_at_mark(buffer.get_insert())
+        startIter,endIter = None,None
         
-        cursor_pos = buffer.get_property('cursor-position')
-        current_iter = buffer.get_iter_at_offset(cursor_pos)
+        try:
+            startIter,endIter = buffer.get_selection_bounds()
+        except ValueError,e:
+            startIter = buffer.get_iter_at_mark(buffer.get_insert())
         
-        for tag in current_iter.get_tags():
-            tagName = tag.get_property('name')
-            if not current_iter.begins_tag(tag) and tagName in KEYWORDS:
-                
-                startIter,endIter = get_tag_bounds(current_iter,tag)
-                if move_left_to_right > 0:
-                    buffer.select_range(startIter,endIter)
-                else:
-                    buffer.select_range(endIter,startIter)
-                
-                selectedKeyword = tagName
-                
-                break
+        tag_table = buffer.get_tag_table()
+        for keywordName in KEYWORDS:
+            tag = tag_table.lookup(keywordName)
+            iter = None
+            
+            if endIter:
+                iter = has_tag_in_range(tag,startIter,endIter)
+            elif not current_iter.begins_tag(tag) and current_iter.has_tag(tag):
+                iter = current_iter
+            
+            if not iter: continue
+            
+            startIter,endIter = get_tag_bounds(iter,tag)
+            if move_left_to_right > 0:
+                buffer.select_range(startIter,endIter)
+            else:
+                buffer.select_range(endIter,startIter)
+            
+            selectedKeyword = keywordName
+            
+            break
         
         self.handler_unblock(self.id_move_cursor)
         
@@ -1230,32 +1237,8 @@ class FormatPromptTextView(gtk.TextView):
     def _on_selection_changed(self,selectedKeyword=None):
         buffer = self.buffer
         
-        print '_on_selection_changed()',self.buffer.get_has_selection(),self.buffer.get_selection_bounds()
-        #if not self.buffer.get_has_selection():
-        #    1/0
-        
-        if self._has_selection and not selectedKeyword:
-            tagTable = buffer.get_tag_table()
-            
-            for keywordName in KEYWORDS:
-                tag = tagTable.lookup(keywordName)
-                
-                startSel,endSel = buffer.get_selection_bounds()
-                
-                tagIter = has_tag_in_range(tag,startSel,endSel)
-                if not tagIter: continue
-                
-                self.handler_block(self.id_move_cursor)
-                
-                newStartSel = tagIter.copy()
-                newEndSel = tagIter.copy()
-                newEndSel.forward_to_tag_toggle(tag)
-                
-                buffer.select_range(newStartSel,newEndSel)
-                
-                self.handler_unblock(self.id_move_cursor)
-                
-                selectedKeyword = keywordName
+        if not selectedKeyword:
+            selectedKeyword = self._try_to_select_keyword(buffer,True)
         
         self.emit('selection-change',selectedKeyword)
     
