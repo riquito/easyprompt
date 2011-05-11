@@ -434,11 +434,8 @@ class TextStyle:
             
             for tag in currentIter.get_tags():
                 singleCharStyles.append(TextStyle.from_gtk_tag(tag))
-                print 'single char tag style', singleCharStyles[-1]
-            
             
             text_styles.append(TextStyle.merge_styles(singleCharStyles,fill_empty_properties=True))
-            print 'fusion', text_styles[-1]
             
             currentIter.forward_char()
         
@@ -704,6 +701,17 @@ class Styling(gtk.VBox):
             self.emit('color-selected', self.currentColor)
         
         def set_color_brightness(self,brightness):
+            try:
+                brightness = {
+                    TextStyle.WEIGHT_BOLD:'bright',
+                    TextStyle.WEIGHT_FAINT:'dark',
+                    TextStyle.WEIGHT_NORMAL:'normal',
+                    TextStyle.INCONSISTENT:'normal'
+                }[brightness]
+                
+            except KeyError:
+                pass
+            
             self.color_brightness = brightness
             self.queue_draw()
         
@@ -928,7 +936,7 @@ class Styling(gtk.VBox):
             Styling._memory[self.keywordsBox.get_active()]= tstyle
         print '\nstyle changed',Styling._memory[self.keywordsBox.get_active()],"\n"
         
-        self.frameFgColors.set_color_brightness({'normal':'normal','bold':'bright','faint':'dark'}[tstyle.weight])
+        self.frameFgColors.set_color_brightness(tstyle.weight)
         
         self.emit('changed')
     
@@ -1714,6 +1722,9 @@ class Window(gtk.Window):
             self.textview.change_keyword_appearance(keywordName,stylingObj)
         else:
             tstyle = stylingObj.get_styling()
+            
+            print 'stile rilevato',tstyle
+            
             if self.baseColorsCheckBtn.get_active():
                 self.textview.change_base_colors(tstyle)
                 
