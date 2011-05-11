@@ -921,7 +921,8 @@ class Styling(gtk.VBox):
         for keywordName in KEYWORDS:
             Styling._memory[keywordName]=TextStyle()
         
-        self.set_current_keyword(self.get_current_keyword())    
+        self.set_current_keyword(self.get_current_keyword())
+        self.set_styling(TextStyle()) 
         self.emit('changed')
     
     def _export_current_style(self):
