@@ -289,9 +289,7 @@ class TextStyle:
         return getattr(self,attrName) == TextStyle.INCONSISTENT
     
     @staticmethod
-    def to_gtk_tag(tstyle,tag = None):
-        if not tag:
-            tag = gtk.TextTag()
+    def update_gtk_tag(tag,tstyle):
         
         if tstyle.invert and not tstyle.is_inconsistent('invert'):
             tag.invert = True;
@@ -301,18 +299,17 @@ class TextStyle:
             if not tstyle.is_inconsistent(attrName):
                 value = tstyle.get(attrName)
                 
-                if attrName == 'background' or attrName == 'foreground':
+                if attrName in ('background','foreground'):
                     
                     fakeAttrName = attrName
                     
-                    if attrName =='background' and tstyle.invert:
-                        fakeAttrName = 'foreground'
-                    elif attrName =='foreground' and tstyle.invert:
-                        fakeAttrName = 'background'
-                    
+                    if tstyle.invert and not tstyle.is_inconsistent('invert'):
+                        fakeAttrName = 'background' if attrName == 'foreground' else 'foreground'
+                    print 'attrName',attrName,'fake',fakeAttrName,'value'
                     if value == None:
                         tag.set_property(fakeAttrName+'-set',False)
                     else:
+                        print 'value is',RGB_TO_COLORNAME[value],rgb2hex(value)
                         tag.set_property(fakeAttrName,rgb2hex(value))
                         tag.set_property(fakeAttrName+'-set',True)
                     
@@ -347,26 +344,20 @@ class TextStyle:
         
         for attrName in ('underline','strikethrough','background','foreground'):
             
-            if not tstyle.is_inconsistent(attrName):
-                value = tstyle.get(attrName)
+            value = tstyle.get(attrName)
+            
+            if value and not value == TextStyle.INCONSISTENT:
                 
-                if attrName == 'background' or attrName == 'foreground':
-                    
+                if attrName in ('background','foreground'):
                     fakeAttrName = attrName
                     
                     if tstyle.invert and not tstyle.is_inconsistent('invert'):
-                        
-                        if attrName =='background':
-                            fakeAttrName = 'foreground'
-                        elif attrName =='foreground':
-                            fakeAttrName = 'background'
+                        fakeAttrName = 'background' if attrName == 'foreground' else 'foreground'
+                    print 'attrName',attrName,'fake',fakeAttrName,'value',RGB_TO_COLORNAME[value]
+                    tag = tag_table.lookup({'foreground':'fg_','background':'bg_'}[fakeAttrName]+RGB_TO_COLORNAME[value])
+                    tags.append(tag)
                     
-                    if value != None:
-                        tag = tag_table.lookup({'foreground':'fg_','background':'bg_'}[attrName]+RGB_TO_COLORNAME[value])
-                        tag.set_property(fakeAttrName,rgb2hex(value))
-                        tags.append(tag)
-                    
-                elif value:
+                else:
                     tag = tag_table.lookup(attrName)
                     tag.set_property(attrName,value)
                     tags.append(tag)
@@ -381,6 +372,11 @@ class TextStyle:
             elif value == TextStyle.WEIGHT_NORMAL:
                 tags.append(tag_table.lookup('weight_normal'))
         
+        if tstyle.invert and not tstyle.is_inconsistent('invert'):
+            tags.append(tag_table.lookup('invert'))
+        
+        print 'to gtk tags',[tag.get_property('name') for tag in tags]
+        
         return tags
     
     @staticmethod
@@ -390,17 +386,15 @@ class TextStyle:
         
         tagName = tag.get_property('name')
         
-        if getattr(tag,'invert',False):
+        if tag.get_property('name') == 'invert':
             tstyle.set('invert',True)
         
         if tag.get_property('background-set'):
             attrName = 'foreground' if tstyle.invert else 'background'
-            print tag.get_property('background-gdk')
             tstyle.set(attrName,RGB_TO_COLORNAME[hex2rgb(tag.get_property('background-gdk').to_string())])
         
         if tag.get_property('foreground-set'):
             attrName = 'background' if tstyle.invert else 'foreground'
-            print tag.get_property('foreground-gdk')
             tstyle.set(attrName,RGB_TO_COLORNAME[hex2rgb(tag.get_property('foreground-gdk').to_string())])
         
         if tag.get_property('underline-set'):
@@ -433,13 +427,20 @@ class TextStyle:
             singleCharStyles = []
             
             for tag in currentIter.get_tags():
+                print 'tagName',tag.get_property('name')
                 singleCharStyles.append(TextStyle.from_gtk_tag(tag))
+                print 'tag style',singleCharStyles[-1]
             
             text_styles.append(TextStyle.merge_styles(singleCharStyles,fill_empty_properties=True))
             
             currentIter.forward_char()
         
-        return TextStyle.merge_styles(text_styles)
+        tstyle = TextStyle.merge_styles(text_styles)
+        
+        if tstyle.invert and not tstyle.is_inconsistent('invert'):
+            tstyle.background, tstyle.foreground = tstyle.foreground, tstyle.background
+        print 'from gtk selection',tstyle
+        return tstyle
     
     @staticmethod
     def merge_styles(text_styles,fill_empty_properties=False):
@@ -951,6 +952,7 @@ class Styling(gtk.VBox):
         self.frameBgColors.set_color(tstyle.background)
         self.frameFgColors.set_color(tstyle.foreground)
         self.frameStyles.set_styles(tstyle)
+        self._on_style_changed()
     
     def _on_keyword_requested(self,widget,key):
         self.emit('keyword-request',key)
@@ -1115,10 +1117,11 @@ class FormatPromptTextView(gtk.TextView):
             positions=self._find_keyword_pos(text,keywordName)
             
             for start,end in positions:
-                buffer.apply_tag_by_name(
-                                 keywordName,
-                                 buffer.get_iter_at_offset(start),
-                                 buffer.get_iter_at_offset(end))
+                startIter = buffer.get_iter_at_offset(start)
+                endIter = buffer.get_iter_at_offset(end)
+                
+                buffer.remove_all_tags(startIter,endIter)
+                buffer.apply_tag_by_name(keywordName,startIter,endIter)
         
         self.emit('changed')
     
@@ -1128,9 +1131,8 @@ class FormatPromptTextView(gtk.TextView):
         tag=tagTable.lookup(keywordName)
         
         tstyle = styleObj.get_styling(keywordName)
-        
-        # XXX check if the 'invert' attribute is preserved on tag lookup
-        TextStyle.to_gtk_tag(tstyle,tag)
+        print 'key',keywordName,tstyle
+        TextStyle.update_gtk_tag(tag,tstyle)
     
     def change_selection_appearance(self,tstyle,startIter,endIter):
         
@@ -1170,6 +1172,7 @@ class FormatPromptTextView(gtk.TextView):
         
         tags = TextStyle.to_gtk_tags(tstyle,tag_table)
         for tag in tags:
+            print tag.get_property('name')
             self.buffer.apply_tag(tag,startIter,endIter)
         
     def _on_mouse_button_released(self,textview,event):
@@ -1551,6 +1554,15 @@ class Window(gtk.Window):
         for i in range(1,len(parts)-1,2):
             currentIter = buffer.get_end_iter()
             tstyle = tstyles[(i-1)/2]
+            
+            ### again, really inefficient
+            for keywordName in KEYWORDS:
+                if keywordName in parts[i+1]:
+                    self.stylingBox.set_current_keyword(keywordName)
+                    self.stylingBox.activate_keyword()
+                    self.stylingBox.set_styling(tstyle)
+            ### ###
+            
             buffer.insert_with_tags(currentIter,parts[i+1],*TextStyle.to_gtk_tags(tstyle,tag_table))
         
         self.textview.handler_unblock(self.fpt_sel_changed_id)
@@ -1653,7 +1665,7 @@ class Window(gtk.Window):
             
             nextIter = currentIter.copy()
             nextIter.forward_char()
-            
+            print 'iter offset',currentIter.get_offset()
             tstyle = TextStyle.from_gtk_selection(currentIter,nextIter)
             bash_code = TextStyle.to_bash_code(tstyle)
             
