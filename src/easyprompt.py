@@ -1658,23 +1658,23 @@ class Window(gtk.Window):
         currentIter = buffer.get_start_iter()
         endIter = buffer.get_end_iter()
         
-        prev_bash_code = ''
+        prev_bash_code = r'\e[0m'
         
         result = []
         while not currentIter.equal(endIter):
             
             nextIter = currentIter.copy()
             nextIter.forward_char()
-            print 'iter offset',currentIter.get_offset()
+            
             tstyle = TextStyle.from_gtk_selection(currentIter,nextIter)
             bash_code = TextStyle.to_bash_code(tstyle)
             
-            if bash_code != prev_bash_code:
-                prev_bash_code = bash_code
-                if bash_code == '':
-                    bash_code = r'\e[0m'
-                result.append(bash_code)
+            if bash_code == '': bash_code = r'\e[0m'
             
+            if bash_code != prev_bash_code:
+                
+                result.append(bash_code)
+                prev_bash_code = bash_code
             
             keyword_found = self.textview.get_keyword_at_iter(currentIter)
             if keyword_found:
