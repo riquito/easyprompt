@@ -717,13 +717,14 @@ class Styling(gtk.VBox):
             self.queue_draw()
         
         def get_color(self):
-            '''Return the color name'''
+            '''Return the color name or TextStyle.INCONSISTENT'''
             return self.currentColor
         
         def set_color(self,color=TextStyle.INCONSISTENT):
             print 'set_color',color
             if color == TextStyle.INCONSISTENT:
                 self.invisibleRadioBtn.set_active(True)
+                self.currentColor = TextStyle.INCONSISTENT
                 return
             
             if isinstance(color,tuple):
