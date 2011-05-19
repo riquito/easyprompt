@@ -1705,6 +1705,10 @@ class Window(gtk.Window):
         '''
         
         print '__',repr(bash_ps1)
+        
+        # add \[ \] around escaping sequences to ensure aren't counted as printable characters
+        bash_ps1 = re.sub(r'(\\e\[[0-9;]+?m)',r'\[\1\]',bash_ps1)
+        
         return bash_ps1
     
     def write_on_disk(self,line):
