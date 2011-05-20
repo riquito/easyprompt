@@ -935,6 +935,7 @@ class Styling(gtk.VBox):
     
     def _on_style_changed(self):
         tstyle = self._export_current_style()
+        print 'on style changed (cur)',tstyle
         if self.keywordsBox.is_active():
             Styling._memory[self.keywordsBox.get_active()]= tstyle
         print '\nstyle changed',Styling._memory[self.keywordsBox.get_active()],"\n"
@@ -950,9 +951,11 @@ class Styling(gtk.VBox):
             return self._export_current_style()
     
     def set_styling(self,tstyle):
+        print 'set styling',tstyle
         self.frameBgColors.set_color(tstyle.background)
         self.frameFgColors.set_color(tstyle.foreground)
         self.frameStyles.set_styles(tstyle)
+        print 'just set',self._export_current_style()
         self._on_style_changed()
     
     def _on_keyword_requested(self,widget,key):
@@ -1712,15 +1715,34 @@ class Window(gtk.Window):
         return bash_ps1
     
     def write_on_disk(self,line):
-        fp=file(os.path.join(os.environ['HOME'],'.bashrc'),'a')
-        fp.write('\nPS1="%s"' % line)
+        bashrc_path = os.path.join(os.environ['HOME'],'.bashrc')
+        
+        bashrc = file(bashrc_path).read()
+        
+        startLine = '\n### START EASYPROMPT CODE DO NOT EDIT THIS LINE ###\n'
+        endLine = '\n### END EASYPROMPT CODE DO NOT EDIT THIS LINE ###\n'
+        ps1Line = '\nPS1="%s"\n' % line
+        
+        start_idx = bashrc.find(startLine)
+        end_idx = -1
+        
+        if start_idx != -1:
+            end_idx = bashrc.find(endLine,start_idx)
+            
+        if end_idx != -1:
+            bashrc = bashrc[:start_idx] + startLine + ps1Line + endLine + bashrc[end_idx+len(endLine):]
+        else:
+            bashrc += startLine + ps1Line + endLine
+        
+        fp=file(bashrc_path,'wb')
+        fp.write(bashrc)
         fp.close()
 
         dialog=gtk.MessageDialog(self,
             gtk.DIALOG_MODAL,
             gtk.MESSAGE_INFO,
             gtk.BUTTONS_OK,
-            'ho aggiunto il codice in fondo a ~/.bashrc, apri un nuovo terminale o usa "source ~/.bashrc" per provarlo'
+            'Aggiunto il codice in fondo a ~/.bashrc, apri un nuovo terminale o usa "source ~/.bashrc" per provarlo'
         )
         dialog.run()
         dialog.destroy()
