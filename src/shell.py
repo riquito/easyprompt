@@ -33,9 +33,9 @@ def getGnomeTerminalColors(profile="Default"):
     bg_color = x.get_string(GCONF_PROFILE_DIR + "/background_color")
     
     return {
-        "palette": gdk_palette,
-        "background":gtk.gdk.color_parse (bg_color),
-        "foreground":gtk.gdk.color_parse (fg_color)
+        "foreground" : gtk.gdk.color_parse (fg_color),
+        "background" : gtk.gdk.color_parse (bg_color),
+        "palette" : gdk_palette
     }
 
 class ShellWidget(vte.Terminal):
@@ -45,9 +45,6 @@ class ShellWidget(vte.Terminal):
         self.set_font(pango.FontDescription())
         self.connect('child-exited', lambda term: gtk.main_quit())
         self.fork_command()
-    
-    def loadColors(self,colors):
-        self.set_colors(colors["foreground"],colors["background"],colors["palette"])
     
     def set_prompt(self,prompt_format):
         self.feed_child('''export PS1='%s' \n ''' % prompt_format)

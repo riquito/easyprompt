@@ -11,6 +11,8 @@ import output, re
 from math import floor,ceil
 from output import codes
 
+from term_colors import TERM_COLORS, GRAYSCALE, ANSI_COLORS
+
 output.use4prompt=1
 
 import os,sys
@@ -1659,7 +1661,15 @@ class Window(gtk.Window):
     
     def create_terminal(self):
         term=shell.ShellWidget()
-        term.loadColors(shell.getGnomeTerminalColors())
+        try:
+            colors = shell.getGnomeTerminalColors()
+        except:
+            colors = {
+                'foreground' : gtk.gdk.color_parse(ANSI_COLORS[15]),
+                'background' : gtk.gdk.color_parse(ANSI_COLORS[0]),
+                'palette'    : [gtk.gdk.color_parse(hex) for hex in ANSI_COLORS]
+            }
+        term.set_colors(colors['foreground'],colors['background'],colors['palette'])
         term.set_size(term.get_column_count(),10)
         return term
     
