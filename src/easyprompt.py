@@ -12,6 +12,8 @@ from math import floor,ceil
 from output import codes
 
 from term_colors import TERM_COLORS, GRAYSCALE, ANSI_COLORS
+from i18n import _
+
 
 output.use4prompt=1
 
@@ -78,83 +80,83 @@ for name,val in COLORS_8_BACKGROUND_FROM_NAME_TO_INT.iteritems():
 
 KEYWORDS={
     'dateLong': {
-        'command':'$(date +"%d %b %Y")',
-        'help':'data nel formato %d/%b/%Y',
+        'command':'\D{%d %b %Y}',
+        'help':_('CMD_DATELONG'),
         'example':'<span underline="double" color="red">28 Feb 2004</span> foo@mypc /var/log'
     },
     'dateShort': {
-        'command':'$(date +"%d/%m/%y")',
-        'help':'data nel formato %d/%m/%y',
+        'command':'\D{%d/%m/%y}',
+        'help':_('CMD_DATESHORT'),
         'example':'<span underline="double" color="red">28/02/04</span> foo@mypc /var/log'
     },
-    'hourLong': {
-        'command':'$(date +"%H:%M:%S")',
-        'help':'ora nel formato %H:%M:%S',
+    'timeLong': {
+        'command':'\D{%H:%M:%S}',
+        'help':_('CMD_TIMELONG'),
         'example':'<span underline="double" color="red">15:23:59</span> foo@mypc /var/log'
     },
-    'hourShort': {
-        'command':'$(date +"%H:%M")',
-        'help':'ora nel formato %H:%M',
+    'timeShort': {
+        'command':'\D{%H:%M}',
+        'help':_('CMD_TIMESHORT'),
         'example':'<span underline="double" color="red">15:23</span> foo@mypc /var/log'
     },
     'host': {
-        'command':r'\h',
-        'help':'hostname fino al primo punto',
+        'command':r'\H',
+        'help':_('CMD_HOST'),
         'example':'foo@<span underline="double" color="red">mypc</span> /var/log'
     },
     'user': {
         'command':r'\u',
-        'help':'utente corrente',
+        'help':_('CMD_USERNAME'),
         'example':'<span underline="double" color="red">foo</span>@mypc /var/log'
     },
     'newline': {
         'command':r'\n',
-        'help':'a capo',
+        'help':_('CMD_NEWLINE'),
         'example':'foo@mypc /var/log <span underline="double" color="red">↵</span> $'
     },
     'shell': {
         'command':r'\s',
-        'help':'nome della shell',
+        'help':_('CMD_SHELL'),
         'example':'foo@mypc <span underline="double" color="red">bash</span> /var/log  $'
     },
     'version': {
         'command':r'\v',
-        'help':'versione della shell',
+        'help':_('CMD_VERSION'),
         'example':'foo@mypc <span underline="double" color="red">4.2</span> /var/log  $'
     },
     'release': {
         'command':r'\V',
-        'help':'release della shell (versione + numero di patch)',
+        'help':_('CMD_RELEASE'),
         'example':'foo@mypc <span underline="double" color="red">4.2.8</span> /var/log  $'
     },
     'abs_pwd': {
         'command':r'\w',
-        'help':'path completa',
+        'help':_('CMD_ABS_PWD'),
         'example':'foo@mypc <span underline="double" color="red">/var/log</span> $'
     },
     'base_pwd': {
         'command':r'\W',
-        'help':'directory corrente',
+        'help':_('CMD_BASE_PWD'),
         'example':'foo@mypc <span underline="double" color="red">log</span> $'
     },
     'history_num': {
         'command':r'\!',
-        'help':'il numero nella cronologia del comando attuale',
+        'help':_('CMD_HISTORY'),
         'example':'<span underline="double" color="red">508</span> foo@mypc /var/log $ cd\n<span underline="double" color="red">509</span> foo@mypc ~ $'
     },
     'cmd_num': {
         'command':r'\#',
-        'help':'il numero di comando del comando attuale',
+        'help':_('CMD_COMMAND_NUMBER'),
         'example':'<span underline="double" color="red">3</span> foo@mypc /var/log $ echo "hello"\nhello\n<span underline="double" color="red">4</span> foo@mypc /var/log $'
     },
     'prompt': {
         'command':r'\$',
-        'help':'# se root, $ altrimenti',
+        'help':_('CMD_PROMPT'),
         'example':'foo@mypc /var/log <span underline="double" color="red">$</span> sudo su -\nroot@mypc ~ <span underline="double" color="red">#</span>'
     },
     'backslash': {
         'command':r'\\',
-        'help':'un backslash \\',
+        'help':_('CMD_BACKSLASH'),
         'example':'foo<span underline="double" color="red">\\</span>mypc /var/log $'
     },
 }
@@ -779,7 +781,7 @@ class Styling(gtk.VBox):
             
             self._can_send_signal = True
             
-            self.set_label('Styles')
+            self.set_label(_('OPTIONS'))
             self.set_border_width(1)
             
             rows=3
@@ -789,13 +791,13 @@ class Styling(gtk.VBox):
             tableStyles.set_row_spacings(1)
             tableStyles.set_col_spacings(1)
             
-            self.underlineBtn=gtk.CheckButton('underline')
-            self.strikethroughBtn=gtk.CheckButton('strikethrough')
-            self.invertBtn=gtk.CheckButton('invert')
+            self.underlineBtn=gtk.CheckButton(_('UNDERLINE'))
+            self.strikethroughBtn=gtk.CheckButton(_('STRIKETHROUGH'))
+            self.invertBtn=gtk.CheckButton(_('INVERT'))
             
-            self.normalRadio=gtk.RadioButton(None,TextStyle.WEIGHT_NORMAL)
-            self.boldRadio=gtk.RadioButton(self.normalRadio,TextStyle.WEIGHT_BOLD)
-            self.faintRadio=gtk.RadioButton(self.normalRadio,TextStyle.WEIGHT_FAINT)
+            self.normalRadio=gtk.RadioButton(None,_('TEXT_NORMAL'))
+            self.boldRadio=gtk.RadioButton(self.normalRadio,_('TEXT_BOLD'))
+            self.faintRadio=gtk.RadioButton(self.normalRadio,_('TEXT_FAINT'))
             
             for widget in (
                       self.underlineBtn,
@@ -907,11 +909,11 @@ class Styling(gtk.VBox):
         
         print COLORNAME_TO_RGB.keys()
         
-        self.frameBgColors=Styling.ColorsContainer('Background color',COLORNAME_TO_RGB.keys())
+        self.frameBgColors=Styling.ColorsContainer(_('BACKGROUND_COLOR'),COLORNAME_TO_RGB.keys())
         self.frameBgColors.connect('color-selected', lambda *args: self._on_style_changed())
         self.frameBgColors.show()
         
-        self.frameFgColors=Styling.ColorsContainer('Foreground color',COLORNAME_TO_RGB.keys())
+        self.frameFgColors=Styling.ColorsContainer(_('FOREGROUND_COLOR'),COLORNAME_TO_RGB.keys())
         self.frameFgColors.connect('color-selected', lambda *args: self._on_style_changed())
         self.frameFgColors.show()
         
@@ -1336,8 +1338,7 @@ class KeywordsBox(gtk.VBox):
     def __init__(self):
         gtk.VBox.__init__(self)
         
-        labelHelp=gtk.Label("Scegli una parola chiave dall'elenco qui sotto o scrivi quello che preferisci\n"
-                            "Ricorda che su un terminale una parola in bold avrà un colore più brillante, una in faint più scuro\n")
+        labelHelp=gtk.Label(_("HELP_TEXT"))
         labelHelp.show()
         align=gtk.Alignment(0,0,0,0)
         align.add(labelHelp)
@@ -1452,7 +1453,7 @@ class KeywordsBox(gtk.VBox):
         if exampleLines < 3:
             exampleText+= '\n'*(3-exampleLines)
         
-        self.descLabel.set_text(descText)
+        self.descLabel.set_markup(descText)
         self.exampleLabel.set_markup('<span background="black" foreground="white">'+exampleText+"</span>")
         
         self.emit('keyword-changed',keywordName)
@@ -1501,7 +1502,7 @@ class Window(gtk.Window):
         topBox.show()
         vbox.pack_start(topBox,0,0,2)
         
-        self.baseColorsCheckBtn=gtk.CheckButton('usa i colori per modificare sfondo e colore del testo di EasyPrompt')
+        self.baseColorsCheckBtn=gtk.CheckButton(_('CLICK_TO_USE_COLORS_FOR_BACKGROUND_FOREGROUND'))
         self.baseColorsCheckBtn.connect('toggled',self.on_checkBtn_baseColors_clicked)
         self.baseColorsCheckBtn.show()
         vbox.pack_start(self.baseColorsCheckBtn,0,0,2)
@@ -1521,7 +1522,7 @@ class Window(gtk.Window):
         txtBox.pack_start(sw,1,1,2)
         
         tmpVBox = gtk.VBox()
-        btn=gtk.Button('Import...')
+        btn=gtk.Button(_('IMPORT'))
         btn.show()
         btn.connect('clicked', self.on_importBtn_clicked)
         tmpVBox.pack_start(btn,0,0,0)
@@ -1534,14 +1535,14 @@ class Window(gtk.Window):
         
         codePreviewBox=gtk.HBox()
         
-        btn=gtk.Button('Reset')
+        btn=gtk.Button(_('RESET'))
         btn.show()
         btn.connect('clicked', lambda *x: self.stylingBox.reset())
         btn.connect('clicked', lambda *x: self.textview.reset_colors())
         codePreviewBox.pack_start(btn,0,0,2)
         
         label=gtk.Label()
-        label.set_markup("<b>Generated code</b>");
+        label.set_markup(_('GENERATED_CODE'));
         codePreviewBox.pack_start(label,0,0,2)
         self.codePreview=gtk.Label()
         self.codePreview.set_selectable(True)
@@ -1553,7 +1554,7 @@ class Window(gtk.Window):
         self.term.show()
         vbox.pack_start(self.term,1,1,2)
         
-        btn=gtk.Button('Save')
+        btn=gtk.Button(_('SAVE'))
         btn.connect('clicked', lambda *x: self.write_on_disk(self.convert_to_bash()))
         btn.show()
         vbox.pack_start(btn,0,0,2)
@@ -1631,17 +1632,12 @@ class Window(gtk.Window):
             None
         )
         
-        dialog.set_markup('Please enter your bash prompt code:')
+        dialog.set_markup(_('ENTER_BASH_PROMPT_CODE'))
         entry = gtk.Entry()
         entry.connect("activate",on_entry_activated,dialog)
         
-        hbox = gtk.HBox()
-        hbox.pack_start(gtk.Label("Name:"), False, 5, 5)
-        hbox.pack_end(entry)
+        dialog.vbox.pack_end(entry)
         
-        dialog.format_secondary_markup("This will be used for <i>identification</i> purposes")
-        
-        dialog.vbox.pack_end(hbox, True, True, 0)
         dialog.show_all()
         
         response = dialog.run()
@@ -1797,7 +1793,7 @@ class Window(gtk.Window):
             gtk.DIALOG_MODAL,
             gtk.MESSAGE_INFO,
             gtk.BUTTONS_OK,
-            'Aggiunto il codice in fondo a ~/.bashrc, apri un nuovo terminale o usa "source ~/.bashrc" per provarlo'
+            _('SAVE_MESSAGE')
         )
         dialog.run()
         dialog.destroy()
@@ -1848,5 +1844,16 @@ class Window(gtk.Window):
         gtk.main()
 
 if __name__=='__main__':
+    import locale
+    import i18n
+    
+    language_code,encoding = locale.getdefaultlocale()
+    if language_code.upper() == 'C':
+        language_code = 'en'
+    
+    simple_language_code = language_code.split('_')[0]
+    if simple_language_code in i18n.AVAILABLE_LANGUAGES:
+        i18n.CURRENT_LANG = simple_language_code
+    
     win=Window()
     win.run()
