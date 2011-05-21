@@ -33,6 +33,10 @@ STRINGS = {
         'en' : '<b>Generated code</b>',
         'it' : '<b>Codice generato</b>'
     },
+    'INSERT' : {
+        'en' : 'insert',
+        'it' : 'aggiungi'
+    },
     'RESET' : {
         'en' : 'reset',
         'it' : 'ripristina'

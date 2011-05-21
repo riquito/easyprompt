@@ -878,10 +878,6 @@ class Styling(gtk.VBox):
         
         self._is_keyword_active = True
         
-        mainFrame=gtk.Frame('Options')
-        mainFrame.set_border_width(1)
-        
-        
         boxColorsAndStyle=gtk.VBox()
         
         self.keywordsBox=KeywordsBox()
@@ -907,8 +903,6 @@ class Styling(gtk.VBox):
         
         vbox = gtk.VBox()
         
-        print COLORNAME_TO_RGB.keys()
-        
         self.frameBgColors=Styling.ColorsContainer(_('BACKGROUND_COLOR'),COLORNAME_TO_RGB.keys())
         self.frameBgColors.connect('color-selected', lambda *args: self._on_style_changed())
         self.frameBgColors.show()
@@ -930,12 +924,7 @@ class Styling(gtk.VBox):
         boxColorsAndStyle.pack_start(hbox,0,0,2)
         
         boxColorsAndStyle.show()
-        #vbox.pack_start(boxColorsAndStyle,0,0,10)
-        
-        mainFrame.add(boxColorsAndStyle)
-        
-        mainFrame.show()
-        self.pack_start(mainFrame,1,1,0)
+        self.pack_start(boxColorsAndStyle,1,1,0)
         
         self.reset()
     
@@ -1374,7 +1363,7 @@ class KeywordsBox(gtk.VBox):
         
         liststore = gtk.ListStore(gobject.TYPE_STRING)
         idx = 0
-        for key in KEYWORDS:
+        for key in sorted(KEYWORDS):
             liststore.append((key,))
             self.keywordToIndex[key] = idx
             idx += 1
@@ -1394,7 +1383,7 @@ class KeywordsBox(gtk.VBox):
         #mainBox.pack_start(combobox,0,0,2)
         tmpHbox.pack_start(combobox,0,0,2)
         
-        insertBtn=gtk.Button('Insert')
+        insertBtn=gtk.Button(_('INSERT'))
         insertBtn.connect('clicked',self._on_insertBtn_clicked)
         insertBtn.show()
         #mainBox.pack_start(insertBtn,0,0,2)
