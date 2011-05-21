@@ -290,7 +290,6 @@ class TextStyle:
     
     @staticmethod
     def update_gtk_tag(tag,tstyle):
-        
         if tstyle.invert and not tstyle.is_inconsistent('invert'):
             tag.invert = True;
         
@@ -305,11 +304,23 @@ class TextStyle:
                     
                     if tstyle.invert and not tstyle.is_inconsistent('invert'):
                         fakeAttrName = 'background' if attrName == 'foreground' else 'foreground'
-                    print 'attrName',attrName,'fake',fakeAttrName,'value'
+                    
                     if value == None:
                         tag.set_property(fakeAttrName+'-set',False)
+                        setattr(tag,'_'+fakeAttrName+'ColorName',None)
                     else:
-                        print 'value is',RGB_TO_COLORNAME[value],rgb2hex(value)
+                        setattr(tag,'_'+fakeAttrName+'ColorName',RGB_TO_COLORNAME[value])
+                        
+                        weight = tstyle.get('weight')
+                        if not weight or tstyle.is_inconsistent('weight'):
+                            weight = TextStyle.WEIGHT_NORMAL
+                        
+                        def get_if_less_than_max(x,max=255):
+                            return x if x < max else max;
+                        
+                        if fakeAttrName == 'foreground':
+                            value = [int(round(get_if_less_than_max(x* {'faint':0.7,'normal':1,'bold':1.4}[weight]))) for x in value]
+                        
                         tag.set_property(fakeAttrName,rgb2hex(value))
                         tag.set_property(fakeAttrName+'-set',True)
                     
@@ -353,9 +364,14 @@ class TextStyle:
                     
                     if tstyle.invert and not tstyle.is_inconsistent('invert'):
                         fakeAttrName = 'background' if attrName == 'foreground' else 'foreground'
-                    print 'attrName',attrName,'fake',fakeAttrName,'value',RGB_TO_COLORNAME[value]
-                    tag = tag_table.lookup({'foreground':'fg_','background':'bg_'}[fakeAttrName]+RGB_TO_COLORNAME[value])
+                    
+                    tag = tag_table.lookup(
+                        {
+                            'foreground':'fg_'+tstyle.get('weight')+'_',
+                            'background':'bg_normal_'
+                        }[fakeAttrName] + RGB_TO_COLORNAME[value])
                     tags.append(tag)
+                    setattr(tag,'_'+fakeAttrName+'ColorName',RGB_TO_COLORNAME[value])
                     
                 else:
                     tag = tag_table.lookup(attrName)
@@ -391,11 +407,13 @@ class TextStyle:
         
         if tag.get_property('background-set'):
             attrName = 'foreground' if tstyle.invert else 'background'
-            tstyle.set(attrName,RGB_TO_COLORNAME[hex2rgb(tag.get_property('background-gdk').to_string())])
+            colorName = getattr(tag,'_'+attrName+'ColorName',None)
+            tstyle.set(attrName,colorName)
         
         if tag.get_property('foreground-set'):
             attrName = 'background' if tstyle.invert else 'foreground'
-            tstyle.set(attrName,RGB_TO_COLORNAME[hex2rgb(tag.get_property('foreground-gdk').to_string())])
+            colorName = getattr(tag,'_'+attrName+'ColorName',None)
+            tstyle.set(attrName,colorName)
         
         if tag.get_property('underline-set'):
             tstyle.set('underline',tag.get_property('underline'))
@@ -1021,7 +1039,7 @@ class FormatPromptTextView(gtk.TextView):
     
     def __init__(self,*args):
         gtk.TextView.__init__(self,*args)
-        self.modify_font(pango.FontDescription('Courier 14'))
+        self.modify_font(pango.FontDescription('Monospace 11'))
         self.set_property('left-margin',2) 
         self.modify_base(gtk.STATE_NORMAL,gtk.gdk.color_parse('#000000'))
         self.modify_text(gtk.STATE_NORMAL,gtk.gdk.color_parse('#FFFFFF'))
@@ -1029,17 +1047,30 @@ class FormatPromptTextView(gtk.TextView):
         
         table=self.buffer.get_tag_table()
         
+        def get_if_less_than_max(x,max=255):
+            return x if x < max else max;
+        
         for colorName,rgb in COLORNAME_TO_RGB.iteritems():
             
-            hexCode=rgb2hex(rgb)
-            
-            tag=gtk.TextTag('bg_'+colorName)
-            tag.set_property('background',hexCode)
-            table.add(tag)
-            
-            tag=gtk.TextTag('fg_'+colorName)
-            tag.set_property('foreground',hexCode)
-            table.add(tag)
+            for weight in (
+                TextStyle.WEIGHT_FAINT,
+                TextStyle.WEIGHT_NORMAL,
+                TextStyle.WEIGHT_BOLD
+                ):
+                
+                r,g,b = (int(round(get_if_less_than_max(x* {'faint':0.7,'normal':1,'bold':1.4}[weight]))) for x in rgb)
+                
+                hexCode = rgb2hex((r,g,b))
+                
+                tag=gtk.TextTag('bg_%s_%s' % (weight,colorName))
+                tag.set_property('background',hexCode)
+                table.add(tag)
+                tag._backgroundColorName = colorName
+                
+                tag=gtk.TextTag('fg_%s_%s' % (weight,colorName))
+                tag.set_property('foreground',hexCode)
+                table.add(tag)
+                tag._foregroundColorName = colorName
         
         for weight in (
                 ('faint',pango.WEIGHT_ULTRALIGHT),
@@ -1052,6 +1083,8 @@ class FormatPromptTextView(gtk.TextView):
         
         for keywordName in KEYWORDS:
             tag=gtk.TextTag(keywordName)
+            tag._foregroundColorName = None
+            tag._backgroundColorName = None
             table.add(tag)
         
         tag=gtk.TextTag('underline')
@@ -1146,10 +1179,21 @@ class FormatPromptTextView(gtk.TextView):
             tags = []
             if tstyle.is_inconsistent('background'):
                 for colorName in COLORNAME_TO_RGB:
-                    tags.append(tag_table.lookup('bg_'+colorName))
+                    for weight in (
+                        TextStyle.WEIGHT_FAINT,
+                        TextStyle.WEIGHT_NORMAL,
+                        TextStyle.WEIGHT_BOLD
+                        ):
+                        tags.append(tag_table.lookup('bg_' + weight + '_'+colorName))
+            
             if tstyle.is_inconsistent('foreground'):
                 for colorName in COLORNAME_TO_RGB:
-                    tags.append(tag_table.lookup('fg_'+colorName))
+                    for weight in (
+                        TextStyle.WEIGHT_FAINT,
+                        TextStyle.WEIGHT_NORMAL,
+                        TextStyle.WEIGHT_BOLD
+                        ):
+                        tags.append(tag_table.lookup('fg_' + weight + '_' + colorName))
             if tstyle.is_inconsistent('strikethrough'):
                 tags.append(tag_table.lookup('strikethrough'))
             if tstyle.is_inconsistent('underline'):
@@ -1671,6 +1715,7 @@ class Window(gtk.Window):
             nextIter.forward_char()
             
             tstyle = TextStyle.from_gtk_selection(currentIter,nextIter)
+            
             bash_code = TextStyle.to_bash_code(tstyle)
             
             if bash_code == '': bash_code = r'\e[0m'
