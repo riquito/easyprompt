@@ -1,9 +1,12 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-__author__='Riccardo Attilio Galli <riccardo@sideralis.org>'
+__author__ = 'Riccardo Attilio Galli <riccardo@sideralis.org>'
 __organization__='Sideralis'
+__program_name__ = 'EasyPrompt'
 __version__='1.1.0'
+__copyright__ = 'Copyright © Riccardo Attilio Galli'
+__website__ = 'http://www.sideralis.org'
 
 import gtk,pango,gobject
 import shell
@@ -1480,6 +1483,38 @@ class Window(gtk.Window):
         
         vbox=gtk.VBox()
         
+        menu_bar_ui = \
+        """
+        <ui>
+            <menubar name="MenuBar">
+                <menu action="File">
+                    <menuitem action="Quit"/>
+                </menu>
+                <menu action="About" name="AboutMenu">
+                    <menuitem action="Version"/>
+                </menu>
+            </menubar>
+        </ui>
+        """
+        action_group = gtk.ActionGroup("MenuBarActionGroup")
+        action_group.add_actions([
+            ("File", None, "_File"),
+            ("About", None, "_About"),
+            ("Quit", gtk.STOCK_QUIT, "_Quit", None, "Quit application", gtk.mainquit),
+            ("Version", gtk.STOCK_ABOUT, "_Version", None, "Show current version", self.show_about_dialog)
+        ])
+        
+        ui_manager = gtk.UIManager()
+        accel_group = ui_manager.get_accel_group()
+        self.add_accel_group(accel_group)
+        ui_manager.insert_action_group(action_group, 0)
+        ui_manager.add_ui_from_string(menu_bar_ui)
+        
+        menu_bar = ui_manager.get_widget("/MenuBar")
+        menu_bar.show()
+        vbox.pack_start(menu_bar,0,0,0)
+
+        
         topBox=gtk.VBox()
         
         self.stylingBox=Styling()
@@ -1556,6 +1591,19 @@ class Window(gtk.Window):
         self.set_prompt_from_bash_string(self.get_system_prompt())
         
         self.show()
+    
+    def show_about_dialog(self,menuItem):
+        dialog = gtk.AboutDialog()
+        dialog.set_modal(True)
+        dialog.set_transient_for(self)
+        dialog.set_destroy_with_parent(True)
+        dialog.set_name(__program_name__)
+        dialog.set_version(__version__)
+        dialog.set_copyright(__copyright__)
+        dialog.set_license(file(os.path.join(os.path.dirname(os.path.realpath(__file__)),'LICENSE')).read())
+        dialog.set_website(__website__)
+        dialog.run()
+        dialog.destroy()
     
     def get_system_prompt(self):
         return os.environ.get('PS1','')
