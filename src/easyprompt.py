@@ -9,27 +9,21 @@ __copyright__ = 'Copyright © Riccardo Attilio Galli'
 __website__ = 'http://www.sideralis.org'
 __license__ = 'GPLv3'
 
+import os,sys,re
 import gtk,pango,gobject
-import shell
-import output, re
-from math import floor,ceil
-from output import codes
 
+from math import floor,ceil
+
+import shell
 from term_colors import TERM_COLORS, GRAYSCALE, ANSI_COLORS
 from i18n import _
 
-
-output.use4prompt=1
-
-import os,sys
 CONFIG_PATH  = os.path.join(os.getenv('HOME'),'.easyprompt')
 PLUGINS_PATH = os.path.join(CONFIG_PATH,'plugins')
 
 if not os.path.exists(PLUGINS_PATH):
     os.makedirs(PLUGINS_PATH)
 
-#base[NORMAL] = "#000000"\
-#text[NORMAL] = "#CCCCCC"\ 
 
 gtk.rc_parse_string(\
  'style "default" { \
