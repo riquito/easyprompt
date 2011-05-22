@@ -105,9 +105,13 @@ STRINGS = {
         'en' : 'time in format %H:%M',
         'it' : 'tempo nel formato %H:%M'
     },
-    'CMD_HOST' : {
+    'CMD_HOST_COMPLETE' : {
         'en' : 'the host name',
         'it' : 'il nome dell\'host'
+    },
+    'CMD_HOST_SHORT' : {
+        'en' : 'the host name until the first dot \'.\'',
+        'it' : 'il nome dell\'host fino al primo punto \'.\''
     },
     'CMD_USERNAME' : {
         'en' : 'the username of the current user',

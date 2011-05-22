@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Riccardo Attilio Galli <riccardo@sideralis.org>'
-__organization__='Sideralis'
+__organization__ = 'Sideralis'
 __program_name__ = 'EasyPrompt'
-__version__='1.1.0'
+__version__ = '1.1.0'
 __copyright__ = 'Copyright © Riccardo Attilio Galli'
 __website__ = 'http://www.sideralis.org'
+__license__ = 'GPLv3'
 
 import gtk,pango,gobject
 import shell
@@ -83,28 +84,33 @@ for name,val in COLORS_8_BACKGROUND_FROM_NAME_TO_INT.iteritems():
 
 KEYWORDS={
     'dateLong': {
-        'command':'\D{%d %b %Y}',
+        'command':r'\D{%d %b %Y}',
         'help':_('CMD_DATELONG'),
         'example':'<span underline="double" color="red">28 Feb 2004</span> foo@mypc /var/log'
     },
     'dateShort': {
-        'command':'\D{%d/%m/%y}',
+        'command':r'\D{%d/%m/%y}',
         'help':_('CMD_DATESHORT'),
         'example':'<span underline="double" color="red">28/02/04</span> foo@mypc /var/log'
     },
     'timeLong': {
-        'command':'\D{%H:%M:%S}',
+        'command':r'\D{%H:%M:%S}',
         'help':_('CMD_TIMELONG'),
         'example':'<span underline="double" color="red">15:23:59</span> foo@mypc /var/log'
     },
     'timeShort': {
-        'command':'\D{%H:%M}',
+        'command':r'\D{%H:%M}',
         'help':_('CMD_TIMESHORT'),
         'example':'<span underline="double" color="red">15:23</span> foo@mypc /var/log'
     },
-    'host': {
+    'hostComplete': {
         'command':r'\H',
-        'help':_('CMD_HOST'),
+        'help':_('CMD_HOST_COMPLETE'),
+        'example':'foo@<span underline="double" color="red">mypc.domain</span> /var/log'
+    },
+    'hostShort': {
+        'command':r'\h',
+        'help':_('CMD_HOST_SHORT'),
         'example':'foo@<span underline="double" color="red">mypc</span> /var/log'
     },
     'user': {
@@ -1588,7 +1594,7 @@ class Window(gtk.Window):
         
         txtBox.set_size_request(-1,self.textview.get_line_yrange(self.textview.buffer.get_start_iter())[1]*3)
         
-        self.set_prompt_from_bash_string(self.get_system_prompt())
+        self.get_system_prompt(self.set_prompt_from_bash_string)
         
         self.show()
     
@@ -1605,8 +1611,21 @@ class Window(gtk.Window):
         dialog.run()
         dialog.destroy()
     
-    def get_system_prompt(self):
-        return os.environ.get('PS1','')
+    def get_system_prompt(self,callback):
+        
+        import vte
+        
+        v = vte.Terminal()
+        v.fork_command('bash')
+        v.feed_child('echo $(expr 1 + 1)${PS1}2\n')
+        
+        def on_content_changed(term):
+            text= term.get_text(lambda *a: True)
+            match = re.match(r'.*PS1.*2\n2(.+?)2\n',text,re.S)
+            if match:
+                callback(match.group(1))
+        
+        v.connect('contents-changed', on_content_changed)
     
     def set_prompt_from_bash_string(self,bash_code):
         self.textview.handler_block(self.fpt_sel_changed_id)
@@ -1809,7 +1828,7 @@ class Window(gtk.Window):
         
         startLine = '\n### START EASYPROMPT CODE DO NOT EDIT THIS LINE ###\n'
         endLine = '\n### END EASYPROMPT CODE DO NOT EDIT THIS LINE ###\n'
-        ps1Line = '\nPS1="%s"\n' % line
+        ps1Line = "\nPS1='%s'\n" % line
         
         start_idx = bashrc.find(startLine)
         end_idx = -1
