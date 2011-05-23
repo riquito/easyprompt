@@ -1,0 +1,11 @@
+[
+    {
+        "keyword": "cpuload",
+        "command": "$(cat /proc/loadavg |cut -f1 -d\" \")", 
+        "example": "<span underline=\"double\" color=\"red\">0.06</span> foo@mypc /var/log", 
+        "desc": {
+            "en": "Show cpu load in the last 5 minutes", 
+            "it": "Mostra il carico della cpu negli ultimi 5 minuti"
+        }
+    }
+]

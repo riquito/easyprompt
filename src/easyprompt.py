@@ -18,20 +18,12 @@ import shell
 from term_colors import TERM_COLORS, GRAYSCALE, ANSI_COLORS
 from i18n import _
 
-CONFIG_PATH  = os.path.join(os.getenv('HOME'),'.easyprompt')
-PLUGINS_PATH = os.path.join(CONFIG_PATH,'plugins')
-
-if not os.path.exists(PLUGINS_PATH):
-    os.makedirs(PLUGINS_PATH)
-
-
 gtk.rc_parse_string(\
  'style "default" { \
     GtkTextView::cursor_color    = "#cc0000" \
  } \
  class "GtkTextView" style "default"'
 )
-
 
 colors={}
 
@@ -76,93 +68,60 @@ for name,val in COLORS_8_FOREGROUND_FROM_NAME_TO_INT.iteritems():
 for name,val in COLORS_8_BACKGROUND_FROM_NAME_TO_INT.iteritems():
     COLORS_8_FROM_INT_TO_NAME[val]=name
 
-KEYWORDS={
-    'dateLong': {
-        'command':r'\D{%d %b %Y}',
-        'help':_('CMD_DATELONG'),
-        'example':'<span underline="double" color="red">28 Feb 2004</span> foo@mypc /var/log'
-    },
-    'dateShort': {
-        'command':r'\D{%d/%m/%y}',
-        'help':_('CMD_DATESHORT'),
-        'example':'<span underline="double" color="red">28/02/04</span> foo@mypc /var/log'
-    },
-    'timeLong': {
-        'command':r'\D{%H:%M:%S}',
-        'help':_('CMD_TIMELONG'),
-        'example':'<span underline="double" color="red">15:23:59</span> foo@mypc /var/log'
-    },
-    'timeShort': {
-        'command':r'\D{%H:%M}',
-        'help':_('CMD_TIMESHORT'),
-        'example':'<span underline="double" color="red">15:23</span> foo@mypc /var/log'
-    },
-    'hostComplete': {
-        'command':r'\H',
-        'help':_('CMD_HOST_COMPLETE'),
-        'example':'foo@<span underline="double" color="red">mypc.domain</span> /var/log'
-    },
-    'hostShort': {
-        'command':r'\h',
-        'help':_('CMD_HOST_SHORT'),
-        'example':'foo@<span underline="double" color="red">mypc</span> /var/log'
-    },
-    'user': {
-        'command':r'\u',
-        'help':_('CMD_USERNAME'),
-        'example':'<span underline="double" color="red">foo</span>@mypc /var/log'
-    },
-    'newline': {
-        'command':r'\n',
-        'help':_('CMD_NEWLINE'),
-        'example':'foo@mypc /var/log <span underline="double" color="red">↵</span> $'
-    },
-    'shell': {
-        'command':r'\s',
-        'help':_('CMD_SHELL'),
-        'example':'foo@mypc <span underline="double" color="red">bash</span> /var/log  $'
-    },
-    'version': {
-        'command':r'\v',
-        'help':_('CMD_VERSION'),
-        'example':'foo@mypc <span underline="double" color="red">4.2</span> /var/log  $'
-    },
-    'release': {
-        'command':r'\V',
-        'help':_('CMD_RELEASE'),
-        'example':'foo@mypc <span underline="double" color="red">4.2.8</span> /var/log  $'
-    },
-    'abs_pwd': {
-        'command':r'\w',
-        'help':_('CMD_ABS_PWD'),
-        'example':'foo@mypc <span underline="double" color="red">/var/log</span> $'
-    },
-    'base_pwd': {
-        'command':r'\W',
-        'help':_('CMD_BASE_PWD'),
-        'example':'foo@mypc <span underline="double" color="red">log</span> $'
-    },
-    'history_num': {
-        'command':r'\!',
-        'help':_('CMD_HISTORY'),
-        'example':'<span underline="double" color="red">508</span> foo@mypc /var/log $ cd\n<span underline="double" color="red">509</span> foo@mypc ~ $'
-    },
-    'cmd_num': {
-        'command':r'\#',
-        'help':_('CMD_COMMAND_NUMBER'),
-        'example':'<span underline="double" color="red">3</span> foo@mypc /var/log $ echo "hello"\nhello\n<span underline="double" color="red">4</span> foo@mypc /var/log $'
-    },
-    'prompt': {
-        'command':r'\$',
-        'help':_('CMD_PROMPT'),
-        'example':'foo@mypc /var/log <span underline="double" color="red">$</span> sudo su -\nroot@mypc ~ <span underline="double" color="red">#</span>'
-    },
-    'backslash': {
-        'command':r'\\',
-        'help':_('CMD_BACKSLASH'),
-        'example':'foo<span underline="double" color="red">\\</span>mypc /var/log $'
-    },
-}
+COMMANDS = []
+
+class CommandPlugin(object):
+    lang = 'en'
+    _cache = {}
+    
+    def __init__(self,plugin):
+        print plugin
+        self.keyword = plugin['keyword']
+        self.bash_command = plugin['command']
+        self.example = plugin['example']
+        self.tstyle  = TextStyle()
+        self._desc    = plugin['desc']
+        
+        self._lowerKeyword = self.keyword.lower()
+        
+        CommandPlugin._cache[self._lowerKeyword] = self
+    
+    def toBash(self):
+        return self.bash_command
+    
+    @staticmethod
+    def lookup(keyword):
+        try:
+            return CommandPlugin._cache[keyword.lower()]
+        except KeyError:
+            return None
+    
+    def __lt__(self,otherPlugin):
+        return self._lowerKeyword < otherPlugin._lowerKeyword
+    
+    def _getDesc(self):
+        try:
+            return self._desc[CommandPlugin.lang]
+        except KeyError:
+            return self.desc['en']
+    
+    def _setDesc(self,value):
+        self._desc = value
+    
+    def __contains__(self,item):
+        if isinstance(item,String):
+            return self._lowerKeyword == item.lower()
+        else:
+            return item == self
+    
+    def __str__(self):
+        return self.__unicode__().encode('utf-8')
+    
+    def __unicode__(self):
+        return u'<plugin %s>' % self.keyword.decode('utf-8')
+    
+    desc = property(_getDesc,_setDesc)
+
 
 
 def rgb2hex(colorTuple):
@@ -573,8 +532,8 @@ class Styling(gtk.VBox):
     __gsignals__ = {
         'changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
                 ()),
-        'keyword-request' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
-                (gobject.TYPE_STRING,)),
+        'activate' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
+                (gobject.TYPE_PYOBJECT,)),
     }
     
     _memory={}
@@ -879,16 +838,16 @@ class Styling(gtk.VBox):
     def __init__(self,*args):
         gobject.GObject.__init__(self)
         
-        self._is_keyword_active = True
+        self._is_command_active = True
         
         boxColorsAndStyle=gtk.VBox()
         
-        self.keywordsBox=KeywordsBox()
-        self.keywordsBox.set_active_first()
-        self.keywordsBox.connect('keyword-changed',self._on_keyword_changed)
-        self.keywordsBox.connect('keyword-request',self._on_keyword_requested)
-        self.keywordsBox.show()
-        boxColorsAndStyle.pack_start(self.keywordsBox,0,0,3)
+        self.gtkCommandsBox=GtkCommandsBox()
+        self.gtkCommandsBox.set_active_command(COMMANDS[0])
+        self.gtkCommandsBox.connect('command-changed',self._on_command_changed)
+        self.gtkCommandsBox.connect('activate',self._on_command_requested)
+        self.gtkCommandsBox.show()
+        boxColorsAndStyle.pack_start(self.gtkCommandsBox,0,0,3)
         
         hbox=gtk.HBox()
         
@@ -932,12 +891,7 @@ class Styling(gtk.VBox):
         self.reset()
     
     def reset(self):
-        from copy import deepcopy
-        
-        for keywordName in KEYWORDS:
-            Styling._memory[keywordName]=TextStyle()
-        
-        self.set_current_keyword(self.get_current_keyword())
+        self.set_current_command(self.get_current_command())
         self.set_styling(TextStyle()) 
         self.emit('changed')
     
@@ -950,19 +904,16 @@ class Styling(gtk.VBox):
     def _on_style_changed(self):
         tstyle = self._export_current_style()
         print 'on style changed (cur)',tstyle
-        if self.keywordsBox.is_active():
-            Styling._memory[self.keywordsBox.get_active()]= tstyle
-        print '\nstyle changed',Styling._memory[self.keywordsBox.get_active()],"\n"
+        if self.gtkCommandsBox.is_sensitive():
+            self.gtkCommandsBox.get_active_command().tstyle = tstyle
+        print '\nstyle changed',self.gtkCommandsBox.get_active_command().tstyle,"\n"
         
         self.frameFgColors.set_color_brightness(tstyle.weight)
         
         self.emit('changed')
     
-    def get_styling(self,keywordName = None):
-        if keywordName and self.keywordsBox.is_active():
-            return Styling._memory[keywordName]
-        else:
-            return self._export_current_style()
+    def get_styling(self):
+        return self._export_current_style()
     
     def set_styling(self,tstyle):
         print 'set styling',tstyle
@@ -972,34 +923,34 @@ class Styling(gtk.VBox):
         print 'just set',self._export_current_style()
         self._on_style_changed()
     
-    def _on_keyword_requested(self,widget,key):
-        self.emit('keyword-request',key)
+    def _on_command_requested(self,widget,key):
+        self.emit('activate',key)
     
-    def _on_keyword_changed(self,keywordBox,keywordName):
-        print 'keyword changed',keywordName,Styling._memory[keywordName]
-        tstyle = Styling._memory[keywordName]
+    def _on_command_changed(self,keywordBox,command):
+        print 'command changed',command,command.tstyle
+        tstyle = command.tstyle
         self.frameBgColors.set_color(tstyle.background)
         self.frameFgColors.set_color(tstyle.foreground)
         self.frameStyles.set_styles(tstyle)
     
-    def set_current_keyword(self,keywordName):
-        self.keywordsBox.set_active(keywordName)
+    def set_current_command(self,command):
+        self.gtkCommandsBox.set_active_command(command)
     
-    def get_current_keyword(self):
-        return self.keywordsBox.get_active()
+    def get_current_command(self):
+        return self.gtkCommandsBox.get_active_command()
     
-    def activate_keyword(self):
-        self._is_keyword_active = True
+    def activate_command(self):
+        self._is_command_active = True
         self.frameStyles.set_sensitive(True)
-        self.keywordsBox.activate_keyword()
-        self._on_keyword_changed(self.keywordsBox,self.keywordsBox.get_active())
+        self.gtkCommandsBox.set_sensitive(True)
+        self._on_command_changed(self.gtkCommandsBox,self.gtkCommandsBox.get_active_command())
     
-    def is_keyword_active(self):
-        return self._is_keyword_active
+    def is_command_active(self):
+        return self._is_command_active
     
-    def deactivate_keyword(self,keepOnlyColors = False):
-        self._is_keyword_active = False
-        self.keywordsBox.deactivate_keyword()
+    def deactivate_command(self,keepOnlyColors = False):
+        self._is_command_active = False
+        self.gtkCommandsBox.set_sensitive(False)
         
         tstyle = TextStyle()
         tstyle.set_inconsistent('background')
@@ -1016,7 +967,7 @@ class Styling(gtk.VBox):
         return self.__unicode__().encode('utf-8')
     
     def __unicode__(self):
-        return u'<type Styling>'+repr(self.get_styling(self.get_current_keyword())).decode('utf-8')+u'</type>'
+        return u'<type Styling>'+repr(self.get_styling(self.get_current_command())).decode('utf-8')+u'</type>'
 
 gobject.type_register(Styling)
 
@@ -1077,8 +1028,8 @@ class FormatPromptTextView(gtk.TextView):
             tag.set_property('weight',weight[1])
             table.add(tag)
         
-        for keywordName in KEYWORDS:
-            tag=gtk.TextTag(keywordName)
+        for command in COMMANDS:
+            tag=gtk.TextTag(command.keyword)
             tag._foregroundColorName = None
             tag._backgroundColorName = None
             table.add(tag)
@@ -1146,26 +1097,25 @@ class FormatPromptTextView(gtk.TextView):
         
         text=buffer.get_text(*buffer.get_bounds())
         
-        for keywordName in KEYWORDS:
-            positions=self._find_keyword_pos(text,keywordName)
+        for command in COMMANDS:
+            positions=self._find_keyword_pos(text,command.keyword)
             
             for start,end in positions:
                 startIter = buffer.get_iter_at_offset(start)
                 endIter = buffer.get_iter_at_offset(end)
                 
                 buffer.remove_all_tags(startIter,endIter)
-                buffer.apply_tag_by_name(keywordName,startIter,endIter)
+                buffer.apply_tag_by_name(command.keyword,startIter,endIter)
         
         self.emit('changed')
     
-    def change_keyword_appearance(self,keywordName,styleObj):
+    def change_command_appearance(self,command,styleObj):
         
         tagTable=self.buffer.get_tag_table()
-        tag=tagTable.lookup(keywordName)
+        tag=tagTable.lookup(command.keyword)
         
-        tstyle = styleObj.get_styling(keywordName)
-        print 'key',keywordName,tstyle
-        TextStyle.update_gtk_tag(tag,tstyle)
+        print 'key',command,command.tstyle
+        TextStyle.update_gtk_tag(tag,command.tstyle)
     
     def change_selection_appearance(self,tstyle,startIter,endIter):
         
@@ -1259,8 +1209,8 @@ class FormatPromptTextView(gtk.TextView):
             startIter = buffer.get_iter_at_mark(buffer.get_insert())
         
         tag_table = buffer.get_tag_table()
-        for keywordName in KEYWORDS:
-            tag = tag_table.lookup(keywordName)
+        for command in COMMANDS:
+            tag = tag_table.lookup(command.keyword)
             iter = None
             
             if endIter:
@@ -1276,7 +1226,7 @@ class FormatPromptTextView(gtk.TextView):
             else:
                 buffer.select_range(endIter,startIter)
             
-            selectedKeyword = keywordName
+            selectedKeyword = command.keyword
             
             break
         
@@ -1296,22 +1246,24 @@ class FormatPromptTextView(gtk.TextView):
         if not selectedKeyword:
             selectedKeyword = self._try_to_select_keyword(buffer,True)
         
-        self.emit('selection-change',selectedKeyword)
+        self.emit('selection-change',CommandPlugin.lookup(selectedKeyword))
     
-    def get_keyword_at_iter(self,current_iter):
+    def get_command_at_iter(self,current_iter):
         
         res = None
         
         for tag in current_iter.get_tags():
             tagName = tag.get_property('name')
-            if tagName in KEYWORDS:
+            print 'tag is',tagName
+            command = CommandPlugin.lookup(tagName)
+            if command:
                 
                 startIter,endIter = get_tag_bounds(current_iter,tag)
                 
                 res = {
                     'start' : startIter,
                     'end'   : endIter,
-                    'keyword' : tagName
+                    'command' : command
                 }
                 
                 break
@@ -1319,11 +1271,11 @@ class FormatPromptTextView(gtk.TextView):
         return res
     
 
-class KeywordsBox(gtk.VBox):
+class GtkCommandsBox(gtk.VBox):
     __gsignals__ = {
-        'keyword-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
+        'command-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
                 (gobject.TYPE_PYOBJECT,)),
-        'keyword-request' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
+        'activate' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
                 (gobject.TYPE_PYOBJECT,))
     }
     
@@ -1339,7 +1291,7 @@ class KeywordsBox(gtk.VBox):
         
         mainBox=gtk.HBox()
         
-        self.keywordToIndex = {}
+        self.commandIndex = {}
         
         '''
         HHHHHHHHHHHHHHHHHHHHHHHH
@@ -1364,17 +1316,17 @@ class KeywordsBox(gtk.VBox):
         
         tmpHbox=gtk.HBox()
         
-        liststore = gtk.ListStore(gobject.TYPE_STRING)
+        liststore = gtk.ListStore(gobject.TYPE_PYOBJECT,gobject.TYPE_STRING)
         idx = 0
-        for key in sorted(KEYWORDS):
-            liststore.append((key,))
-            self.keywordToIndex[key] = idx
+        for command in COMMANDS:
+            liststore.append((command,command.keyword))
+            self.commandIndex[command] = idx
             idx += 1
         
         combobox = gtk.ComboBox(liststore)
         cell = gtk.CellRendererText()
         combobox.pack_start(cell, True)
-        combobox.add_attribute(cell, 'text', 0)
+        combobox.add_attribute(cell, 'text', 1)
         combobox.set_wrap_width(2)
         
         combobox.connect('changed',self._on_combobox_changed)
@@ -1427,51 +1379,43 @@ class KeywordsBox(gtk.VBox):
         
         mainBox.show()
         self.pack_start(mainBox)
+        
+        combobox.set_active(0)
     
     def _on_insertBtn_clicked(self,*args):
-        self.emit('keyword-request',self.get_active())
+        self.emit('activate',self.get_active_command())
     
     def _on_combobox_changed(self,combobox):
-        keywordName=self.get_active()
-        keywordData=KEYWORDS[keywordName]
+        command = self.get_active_command()
         
         ### XXX follows an ugly hack to have a fixed height help zone
         ### It needs to be fixed: the sooner the better
         
-        descText = keywordData['help']
-        
-        exampleText = keywordData['example']
+        exampleText = command.example
         exampleLines = 1 + exampleText.count('\n')
         if exampleLines < 3:
             exampleText+= '\n'*(3-exampleLines)
         
-        self.descLabel.set_markup(descText)
+        self.descLabel.set_markup(command.desc)
         self.exampleLabel.set_markup('<span background="black" foreground="white">'+exampleText+"</span>")
         
-        self.emit('keyword-changed',keywordName)
+        self.emit('command-changed',command)
     
-    def get_active(self):
+    def get_active_command(self):
         model = self.combobox.get_model()
         index = self.combobox.get_active()
-        return model[index][0]
+        if index < 0: return None
+        else: return model[index][0]
     
-    def set_active(self,keywordName):
-        index = self.keywordToIndex[keywordName]
+    def set_active_command(self,command):
+        index = self.commandIndex[command]
         self.combobox.set_active(index)
     
-    def is_active(self):
+    def is_sensitive(self):
         return self.get_property('sensitive')
     
-    def set_active_first(self):
-        self.combobox.set_active(0)
-    
-    def activate_keyword(self):
-        self.set_sensitive(True)
-    
-    def deactivate_keyword(self):
-        self.set_sensitive(False)
 
-gobject.type_register(KeywordsBox)
+gobject.type_register(GtkCommandsBox)
 
 class Window(gtk.Window):
     def __init__(self):
@@ -1519,7 +1463,7 @@ class Window(gtk.Window):
         
         self.stylingBox=Styling()
         self.stylingBox.connect('changed',self.on_style_changed)
-        self.stylingBox.connect('keyword-request',self.on_keyword_requested)
+        self.stylingBox.connect('activate',self.on_command_requested)
         self.stylingBox.show()
         topBox.pack_start(self.stylingBox,0,0,2)
         
@@ -1606,6 +1550,8 @@ class Window(gtk.Window):
         dialog.destroy()
     
     def get_system_prompt(self,callback):
+        callback('')
+        return
         
         import vte
         
@@ -1633,8 +1579,8 @@ class Window(gtk.Window):
         bash_code  = re.sub(r'(\\\[|\\\])','',bash_code) # strip \[ and \]
         
         ### this is incredibly inefficient ###
-        for keywordName in KEYWORDS:
-            bash_code = bash_code.replace(KEYWORDS[keywordName]["command"],keywordName)
+        for command in COMMANDS:
+            bash_code = bash_code.replace(command.toBash(),command.keyword)
         ### ###
         
         pattern = re.compile(r'(?:\\033|\\e)\[((?:\d*[;m])*)')
@@ -1657,10 +1603,10 @@ class Window(gtk.Window):
             tstyle = tstyles[(i-1)/2]
             
             ### again, really inefficient
-            for keywordName in KEYWORDS:
-                if keywordName in parts[i+1]:
-                    self.stylingBox.set_current_keyword(keywordName)
-                    self.stylingBox.activate_keyword()
+            for command in COMMANDS:
+                if command.keyword in parts[i+1]:
+                    self.stylingBox.set_current_command(command)
+                    self.stylingBox.activate_command()
                     self.stylingBox.set_styling(tstyle)
             ### ###
             
@@ -1701,9 +1647,9 @@ class Window(gtk.Window):
     
     def on_checkBtn_baseColors_clicked(self,btn):
         if btn.get_active():
-            self.stylingBox.deactivate_keyword(True)
+            self.stylingBox.deactivate_command(True)
         else:
-            self.stylingBox.activate_keyword()
+            self.stylingBox.activate_command()
     
     def create_terminal(self):
         term=shell.ShellWidget()
@@ -1719,25 +1665,25 @@ class Window(gtk.Window):
         term.set_size(term.get_column_count(),10)
         return term
     
-    def on_formatPrompt_selection_change(self,textview,keywordSelected):
+    def on_formatPrompt_selection_change(self,textview,command):
         if self.baseColorsCheckBtn.get_active():
             return
         
         try:
             start,end = textview.buffer.get_selection_bounds()
             
-            if keywordSelected:
-                self.stylingBox.activate_keyword()
-                self.stylingBox.set_current_keyword(keywordSelected)
+            if command:
+                self.stylingBox.activate_command()
+                self.stylingBox.set_current_command(command)
             else:
-                self.stylingBox.deactivate_keyword()
+                self.stylingBox.deactivate_command()
                 tstyle = TextStyle.from_gtk_selection(start,end)
                 print 'selected. style is ',tstyle
                 self.stylingBox.set_styling(tstyle)
             
         except ValueError, e:
             print 'NO SELECTION, call stylingBox.activate_keyword()'
-            self.stylingBox.activate_keyword()
+            self.stylingBox.activate_command()
     
     def convert_to_bash_and_preview(self,*args):
         converted=self.convert_to_bash()
@@ -1752,8 +1698,8 @@ class Window(gtk.Window):
     def code_preview(self,prompt_format):
         self.codePreview.set_text(prompt_format.strip(u'\x00'))
     
-    def on_keyword_requested(self,widget,key):
-        self.textview.buffer.insert_at_cursor(key)
+    def on_command_requested(self,widget,command):
+        self.textview.buffer.insert_at_cursor(command.keyword)
     
     def convert_to_bash(self):
         
@@ -1781,10 +1727,11 @@ class Window(gtk.Window):
                 result.append(bash_code)
                 prev_bash_code = bash_code
             
-            keyword_found = self.textview.get_keyword_at_iter(currentIter)
-            if keyword_found:
-                nextIter = keyword_found['end']
-                result.append(KEYWORDS[keyword_found['keyword']]['command'])
+            command_coords = self.textview.get_command_at_iter(currentIter)
+            
+            if command_coords:
+                nextIter = command_coords['end']
+                result.append(command_coords['command'].toBash())
             else:
                 result.append(currentIter.get_char())
             
@@ -1858,9 +1805,9 @@ class Window(gtk.Window):
             self.apply_tag_to_template(self.textview,colorName)
     
     def on_style_changed(self,stylingObj):
-        if stylingObj.is_keyword_active():
-            keywordName=self.stylingBox.get_current_keyword()
-            self.textview.change_keyword_appearance(keywordName,stylingObj)
+        if stylingObj.is_command_active():
+            command = self.stylingBox.get_current_command()
+            self.textview.change_command_appearance(command,stylingObj)
         else:
             tstyle = stylingObj.get_styling()
             
@@ -1893,8 +1840,9 @@ class Window(gtk.Window):
     def run(self):
         gtk.main()
 
+
 if __name__=='__main__':
-    import locale
+    import locale,shutil,json
     import i18n
     
     language_code,encoding = locale.getdefaultlocale()
@@ -1904,6 +1852,25 @@ if __name__=='__main__':
     simple_language_code = language_code.split('_')[0]
     if simple_language_code in i18n.AVAILABLE_LANGUAGES:
         i18n.CURRENT_LANG = simple_language_code
+    
+    os.chdir(os.path.abspath(os.path.dirname(__file__)))
+    
+    CONFIG_PATH  = os.path.join(os.getenv('HOME'),'.easyprompt')
+    PLUGINS_PATH = os.path.join(CONFIG_PATH,'plugins')
+    
+    if not os.path.exists(PLUGINS_PATH):
+        os.makedirs(PLUGINS_PATH)
+        
+        for fileName in os.listdir('plugins'):
+            shutil.copy(os.path.join('plugins',fileName),PLUGINS_PATH)
+    
+    for fileName in os.listdir(PLUGINS_PATH):
+        if fileName.endswith('.json'):
+            plugins = json.load(file(os.path.join(PLUGINS_PATH,fileName)))
+            for plugin in plugins:
+                COMMANDS.append(CommandPlugin(plugin))
+    
+    COMMANDS.sort()
     
     win=Window()
     win.run()

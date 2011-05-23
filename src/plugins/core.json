@@ -1,0 +1,155 @@
+[
+    {
+        "keyword": "abs_pwd",
+        "command": "\\w", 
+        "example": "foo@mypc <span underline=\"double\" color=\"red\">/var/log</span> $", 
+        "desc": {
+            "en": "the current working directory, with $HOME abbreviated with a tilde ", 
+            "it": "la directory di lavoro corrente con HOME abbreviato con una tilde"
+        }
+    }, 
+    {
+        "keyword": "backslash",
+        "command": "\\\\", 
+        "example": "foo<span underline=\"double\" color=\"red\">\\</span>mypc /var/log $", 
+        "desc": {
+            "en": "backslash character \\", 
+            "it": "carattere di backslash \\"
+        }
+    }, 
+    {
+        "keyword": "base_pwd",
+        "command": "\\W", 
+        "example": "foo@mypc <span underline=\"double\" color=\"red\">log</span> $", 
+        "desc": {
+            "en": "the basename of the current working directory, with $HOME abbreviated with a tilde ", 
+            "it": "il basename della directory di lavoro corrente, con HOME abbreviato con una tilde"
+        }
+    }, 
+    {
+        "keyword": "cmd_num",
+        "command": "\\#", 
+        "example": "<span underline=\"double\" color=\"red\">3</span> foo@mypc /var/log $ echo \"hello\"\nhello\n<span underline=\"double\" color=\"red\">4</span> foo@mypc /var/log $", 
+        "desc": {
+            "en": "the command number of this command ", 
+            "it": "il numero di comando del comando attuale"
+        }
+    }, 
+    {
+        "keyword": "dateLong",
+        "command": "\\D{%d %b %Y}", 
+        "example": "<span underline=\"double\" color=\"red\">28 Feb 2004</span> foo@mypc /var/log", 
+        "desc": {
+            "en": "data in format %d/%b/%Y", 
+            "it": "data nel formato %d/%b/%Y"
+        }
+    }, 
+    {
+        "keyword": "dateShort",
+        "command": "\\D{%d/%m/%y}", 
+        "example": "<span underline=\"double\" color=\"red\">28/02/04</span> foo@mypc /var/log", 
+        "desc": {
+            "en": "date in format %d/%m/%y", 
+            "it": "data nel formato %d/%m/%y"
+        }
+    }, 
+    {
+        "keyword": "history_num",
+        "command": "\\!", 
+        "example": "<span underline=\"double\" color=\"red\">508</span> foo@mypc /var/log $ cd\n<span underline=\"double\" color=\"red\">509</span> foo@mypc ~ $", 
+        "desc": {
+            "en": "the history number of this command ", 
+            "it": "il numero nella cronologia del comando attuale"
+        }
+    }, 
+    {
+        "keyword": "hostComplete",
+        "command": "\\H", 
+        "example": "foo@<span underline=\"double\" color=\"red\">mypc.domain</span> /var/log", 
+        "desc": {
+            "en": "the host name", 
+            "it": "il nome dell'host"
+        }
+    }, 
+    {
+        "keyword": "hostShort",
+        "command": "\\h", 
+        "example": "foo@<span underline=\"double\" color=\"red\">mypc</span> /var/log", 
+        "desc": {
+            "en": "the host name until the first dot '.'", 
+            "it": "il nome dell'host fino al primo punto '.'"
+        }
+    }, 
+    {
+        "keyword": "newline",
+        "command": "\\n", 
+        "example": "foo@mypc /var/log <span underline=\"double\" color=\"red\">\u21b5</span> $", 
+        "desc": {
+            "en": "newline character", 
+            "it": "carattere di nuova linea"
+        }
+    }, 
+    {
+        "keyword": "prompt",
+        "command": "\\$", 
+        "example": "foo@mypc /var/log <span underline=\"double\" color=\"red\">$</span> sudo su -\nroot@mypc ~ <span underline=\"double\" color=\"red\">#</span>", 
+        "desc": {
+            "en": "<b>#</b> if root, else <b>$</b>", 
+            "it": "<b>#</b> se root, <b>$</b> altrimenti"
+        }
+    }, 
+    {
+        "keyword": "release",
+        "command": "\\V", 
+        "example": "foo@mypc <span underline=\"double\" color=\"red\">4.2.8</span> /var/log  $", 
+        "desc": {
+            "en": "the release of bash, version + patch level", 
+            "it": "release di bash (versione + numero di patch)"
+        }
+    }, 
+    {
+        "keyword": "shell",
+        "command": "\\s", 
+        "example": "foo@mypc <span underline=\"double\" color=\"red\">bash</span> /var/log  $", 
+        "desc": {
+            "en": "the name of the shell", 
+            "it": "nome della shell"
+        }
+    }, 
+    {
+        "keyword": "timeLong",
+        "command": "\\D{%H:%M:%S}", 
+        "example": "<span underline=\"double\" color=\"red\">15:23:59</span> foo@mypc /var/log", 
+        "desc": {
+            "en": "time in format %H:%M:%S", 
+            "it": "tempo nel formato %H:%M:%S"
+        }
+    }, 
+    {
+        "keyword": "timeShort",
+        "command": "\\D{%H:%M}", 
+        "example": "<span underline=\"double\" color=\"red\">15:23</span> foo@mypc /var/log", 
+        "desc": {
+            "en": "time in format %H:%M", 
+            "it": "tempo nel formato %H:%M"
+        }
+    }, 
+    {
+        "keyword": "user",
+        "command": "\\u", 
+        "example": "<span underline=\"double\" color=\"red\">foo</span>@mypc /var/log", 
+        "desc": {
+            "en": "the username of the current user", 
+            "it": "il nome-utente dell'utente corrente"
+        }
+    }, 
+    {
+        "keyword": "version",
+        "command": "\\v", 
+        "example": "foo@mypc <span underline=\"double\" color=\"red\">4.2</span> /var/log  $", 
+        "desc": {
+            "en": "the version of bash", 
+            "it": "versione di bash"
+        }
+    }
+]
