@@ -1593,9 +1593,6 @@ class Window(gtk.Window):
         dialog.destroy()
     
     def get_system_prompt(self,callback):
-        callback('')
-        return
-        
         import vte
         
         v = vte.Terminal()
