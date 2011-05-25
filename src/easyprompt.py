@@ -93,7 +93,7 @@ class CommandPlugin(object):
     def lookup(keyword):
         try:
             return CommandPlugin._cache[keyword.lower()]
-        except KeyError:
+        except (KeyError,AttributeError):
             return None
     
     def __lt__(self,otherPlugin):
@@ -142,7 +142,7 @@ def hex2rgb(hexColor):
     
     return int(hexColor[0:2], 16), int(hexColor[2:4], 16), int(hexColor[4:6], 16)
 
-def get_tag_bounds(iter,tag):
+def get_tag_bounds(iter,tag,word_length=None):
     if not iter.has_tag(tag):
         return None
     
@@ -151,8 +151,38 @@ def get_tag_bounds(iter,tag):
     
     endIter.forward_to_tag_toggle(tag)
     
+    
     if not startIter.begins_tag(tag):
         startIter.backward_to_tag_toggle(tag)
+    
+    print 'tag_bounds',startIter.get_offset(),endIter.get_offset()
+    
+    """
+    12 3456789 10 11 12
+    aa bbbbbbb b  b  c
+           x
+    
+    iterOffset = iter.getOffset() #7
+    
+    startOffset = startIter.getOffset()  #3
+    endOffset = endIter.getOffset()      #12
+    
+    (iterOffset - startOffset) = 4
+    
+    int(4 / word_length) * word_length
+    """
+    
+    
+    if word_length:
+        iterOffset = iter.get_offset()
+        startOffset = startIter.get_offset()
+        gapOffset = startOffset
+        startOffset = int((iterOffset - startOffset) / word_length) * word_length
+        startIter = iter.get_buffer().get_iter_at_offset(startOffset + gapOffset)
+        endIter = startIter.copy()
+        endIter.forward_chars(word_length)
+    
+    print 'now tag_bounds',startIter.get_offset(),endIter.get_offset()
     
     return (startIter,endIter)
 
@@ -1045,6 +1075,18 @@ class FormatPromptTextView(gtk.TextView):
         tag=gtk.TextTag('invert')
         table.add(tag)
         
+        def on_delete_range(buffer,startIter,endIter):
+            
+            res = self.get_command_at_iter(startIter)
+            if res:
+                buffer.handler_block(self.id_delete_range)
+                buffer.delete(res['start'],res['end'])
+                buffer.handler_unblock(self.id_delete_range)
+            
+            buffer.emit_stop_by_name('delete-range')
+            
+        self.id_delete_range = self.buffer.connect('delete-range',on_delete_range);
+        
         # add selection change capabilities
         self._has_selection = False
         self._skip_mouse_release = False
@@ -1094,11 +1136,10 @@ class FormatPromptTextView(gtk.TextView):
         return positions
     
     def on_content_change(self,buffer,*args):
-        
-        text=buffer.get_text(*buffer.get_bounds())
+        text = buffer.get_text(*buffer.get_bounds())
         
         for command in COMMANDS:
-            positions=self._find_keyword_pos(text,command.keyword)
+            positions = self._find_keyword_pos(text,command.keyword)
             
             for start,end in positions:
                 startIter = buffer.get_iter_at_offset(start)
@@ -1220,7 +1261,9 @@ class FormatPromptTextView(gtk.TextView):
             
             if not iter: continue
             
-            startIter,endIter = get_tag_bounds(iter,tag)
+            # there could be the same keyword more than once, ensure we stop at the first one
+            startIter,endIter = get_tag_bounds(iter,tag,len(command.keyword))
+            
             if move_left_to_right > 0:
                 buffer.select_range(startIter,endIter)
             else:
@@ -1258,7 +1301,7 @@ class FormatPromptTextView(gtk.TextView):
             command = CommandPlugin.lookup(tagName)
             if command:
                 
-                startIter,endIter = get_tag_bounds(current_iter,tag)
+                startIter,endIter = get_tag_bounds(current_iter,tag,len(command.keyword))
                 
                 res = {
                     'start' : startIter,
