@@ -15,8 +15,12 @@ import gtk,pango,gobject
 from math import floor,ceil
 
 import shell
-from term_colors import TERM_COLORS, GRAYSCALE, ANSI_COLORS
+from term_colors import (BashColor,ANSIColor,TERM_COLORS,ANSI_COLORS,GRAYSCALE,
+                         lighter_rgb,darker_rgb,rgb2hex)
 from i18n import _
+
+COLORS = ANSI_COLORS
+#COLORS = TERM_COLORS
 
 gtk.rc_parse_string(\
  'style "default" { \
@@ -24,49 +28,6 @@ gtk.rc_parse_string(\
  } \
  class "GtkTextView" style "default"'
 )
-
-colors={}
-
-colors['black']=(0,0,0)
-colors['blue']=(0,0,204)
-colors['green']=(0,204,0)
-colors['cyan']=(0,204,204)
-colors['red']=(204,0,0)
-colors['purple']=(204,0,204)
-colors['brown']=(204,204,0)
-colors['gray']=(170,170,170)
-
-COLORNAME_TO_RGB = colors
-RGB_TO_COLORNAME = dict((a,b) for b,a in COLORNAME_TO_RGB.iteritems())
-
-
-COLORS_8_FOREGROUND_FROM_NAME_TO_INT = {
-    'black'  : 30,
-    'red'    : 31,
-    'green'  : 32,
-    'brown'  : 33,
-    'blue'   : 34,
-    'purple' : 35,
-    'cyan'   : 36,
-    'gray'   : 37
-}
-
-COLORS_8_BACKGROUND_FROM_NAME_TO_INT = {
-    'black'  : 40,
-    'red'    : 41,
-    'green'  : 42,
-    'brown'  : 43,
-    'blue'   : 44,
-    'purple' : 45,
-    'cyan'   : 46,
-    'gray'   : 47
-}
-
-COLORS_8_FROM_INT_TO_NAME = {}
-for name,val in COLORS_8_FOREGROUND_FROM_NAME_TO_INT.iteritems():
-    COLORS_8_FROM_INT_TO_NAME[val]=name
-for name,val in COLORS_8_BACKGROUND_FROM_NAME_TO_INT.iteritems():
-    COLORS_8_FROM_INT_TO_NAME[val]=name
 
 COMMANDS = []
 
@@ -122,25 +83,6 @@ class CommandPlugin(object):
     
     desc = property(_getDesc,_setDesc)
 
-
-
-def rgb2hex(colorTuple):
-    esa=['#']
-    for col in colorTuple:
-        ascii=str(hex(col))
-        esa.append(len(ascii)==4 and ascii[-2:] or ('0'+ascii[-1:]))
-    return ''.join(esa)
-
-def hex2rgb(hexColor):
-    if hexColor[0] == '#': hexColor = hexColor[1:]
-    elif hexColor[0:2].lower() == '0x': hexColor = hexColor[2:]
-    
-    if len(hexColor) == 3:
-        hexColor = ''.join(val for val in hexColor for i in range(2))
-    elif len(hexColor) == 12:
-        hexColor = hexColor[0]*2+hexColor[4]*2+hexColor[8]*2
-    
-    return int(hexColor[0:2], 16), int(hexColor[2:4], 16), int(hexColor[4:6], 16)
 
 def get_tag_bounds(iter,tag,word_length=None):
     if not iter.has_tag(tag):
@@ -235,13 +177,13 @@ class TextStyle:
             if self.is_inconsistent('background'):
                 map['background'] = TextStyle.INCONSISTENT
             else:
-                map['background'] = RGB_TO_COLORNAME[self.background]
+                map['background'] = self.background.hexcolor
         
         if self.foreground:
             if self.is_inconsistent('foreground'):
                 map['foreground'] = TextStyle.INCONSISTENT
             else:
-                map['foreground'] = RGB_TO_COLORNAME[self.foreground]
+                map['foreground'] = self.foreground.hexcolor
         
         if self.underline: map['underline'] = self.underline
         if self.strikethrough: map['strikethrough'] = self.strikethrough
@@ -250,14 +192,21 @@ class TextStyle:
         
         return u'<TextStyle '+u' '.join(('%s="%s"' % (key,value)) for key,value in map.iteritems())+u'>'
     
-    def _color_to_rgb(self,color):
-        if isinstance(color,tuple): return color
+    def _ensureColor(self,color):
+        if isinstance(color,BashColor):
+            return color
+        
+        if isinstance(color,tuple):
+            hex = rgb2hex(color)
         elif color.startswith('#'):
-            return hex2rgb(color)
-        else:
-            try: return COLORNAME_TO_RGB[color]
-            except Exception,e:
-                raise Exception('not a color [%s]' % color)
+            hex = color
+        
+        for i in COLORS:
+            if i.hexcolor == color:
+                return i
+        
+        raise Exception('not a (known?) color [%s]' % color)
+        
     
     def calculate_background(self):
         return self.foreground if self.invert else self.background
@@ -268,7 +217,7 @@ class TextStyle:
     def set(self,attrName,value):
         if attrName == 'background' or attrName == 'foreground':
             if not (value == None or value == TextStyle.INCONSISTENT):
-                value = self._color_to_rgb(value)
+                value = self._ensureColor(value)
         
         setattr(self,attrName,value)
     
@@ -303,21 +252,28 @@ class TextStyle:
                     
                     if value == None:
                         tag.set_property(fakeAttrName+'-set',False)
-                        setattr(tag,'_'+fakeAttrName+'ColorName',None)
+                        setattr(tag,'_'+fakeAttrName+'Color',None)
                     else:
-                        setattr(tag,'_'+fakeAttrName+'ColorName',RGB_TO_COLORNAME[value])
+                        setattr(tag,'_'+fakeAttrName+'Color', value)
                         
                         weight = tstyle.get('weight')
                         if not weight or tstyle.is_inconsistent('weight'):
                             weight = TextStyle.WEIGHT_NORMAL
                         
-                        def get_if_less_than_max(x,max=255):
-                            return x if x < max else max;
-                        
                         if fakeAttrName == 'foreground':
-                            value = [int(round(get_if_less_than_max(x* {'faint':0.7,'normal':1,'bold':1.4}[weight]))) for x in value]
+                            
+                            if weight == TextStyle.WEIGHT_BOLD:
+                                rgb = lighter_rgb(value.rgb)
+                            elif weight == TextStyle.WEIGHT_FAINT:
+                                rgb = darker_rgb(value.rgb)
+                            else:
+                                rgb = value.rgb
+                            
+                            hexcolor = rgb2hex(rgb)
+                        else:
+                            hexcolor = value.hexcolor
                         
-                        tag.set_property(fakeAttrName,rgb2hex(value))
+                        tag.set_property(fakeAttrName,hexcolor)
                         tag.set_property(fakeAttrName+'-set',True)
                     
                 else:
@@ -363,11 +319,11 @@ class TextStyle:
                     
                     tag = tag_table.lookup(
                         {
-                            'foreground':'fg_'+tstyle.get('weight')+'_',
-                            'background':'bg_normal_'
-                        }[fakeAttrName] + RGB_TO_COLORNAME[value])
+                            'foreground':'fg_'+tstyle.get('weight')+'_%s',
+                            'background':'bg_normal_%s'
+                        }[fakeAttrName] % value)
                     tags.append(tag)
-                    setattr(tag,'_'+fakeAttrName+'ColorName',RGB_TO_COLORNAME[value])
+                    setattr(tag,'_'+fakeAttrName+'Color',value)
                     
                 else:
                     tag = tag_table.lookup(attrName)
@@ -403,13 +359,13 @@ class TextStyle:
         
         if tag.get_property('background-set'):
             attrName = 'foreground' if tstyle.invert else 'background'
-            colorName = getattr(tag,'_'+attrName+'ColorName',None)
-            tstyle.set(attrName,colorName)
+            color = getattr(tag,'_'+attrName+'Color',None)
+            tstyle.set(attrName,color)
         
         if tag.get_property('foreground-set'):
             attrName = 'background' if tstyle.invert else 'foreground'
-            colorName = getattr(tag,'_'+attrName+'ColorName',None)
-            tstyle.set(attrName,colorName)
+            color = getattr(tag,'_'+attrName+'Color',None)
+            tstyle.set(attrName,color)
         
         if tag.get_property('underline-set'):
             tstyle.set('underline',tag.get_property('underline'))
@@ -501,30 +457,10 @@ class TextStyle:
             codes.append(7)
         
         if tstyle.background and not tstyle.is_inconsistent('background'):
-            codes.append({
-                'black'  : 40,
-                'red'    : 41,
-                'green'  : 42,
-                'brown'  : 43,
-                'blue'   : 44,
-                'purple' : 45,
-                'cyan'   : 46,
-                'gray'   : 47
-              }[RGB_TO_COLORNAME[tstyle.background]]
-            )
+            codes.append(tstyle.background.getEscapeCode(isBackground=True))
         
         if tstyle.foreground and not tstyle.is_inconsistent('foreground'):
-            codes.append({
-                'black'  : 30,
-                'red'    : 31,
-                'green'  : 32,
-                'brown'  : 33,
-                'blue'   : 34,
-                'purple' : 35,
-                'cyan'   : 36,
-                'gray'   : 37
-              }[RGB_TO_COLORNAME[tstyle.foreground]]
-            )
+            codes.append(tstyle.foreground.getEscapeCode())
         
         if len(codes):
             return r'\e[%sm' % ';'.join(str(x) for x in codes)
@@ -550,11 +486,11 @@ class TextStyle:
             elif val == 9:
                 tstyle.strikethrough = True
             elif 30 <= val <= 37:
-                name = COLORS_8_FROM_INT_TO_NAME[val]
-                tstyle.foreground = COLORNAME_TO_RGB[name]
+                tstyle.foreground = ANSI_COLORS[val-30]
             elif 40 <= val <= 47:
-                name = COLORS_8_FROM_INT_TO_NAME[val]
-                tstyle.background = COLORNAME_TO_RGB[name]
+                tstyle.background = ANSI_COLORS[val-40+8]
+            
+            # XXX TODO doesn't work with 256 colors (usually are something like 38;5;colorCode)
         
         return tstyle
 
@@ -579,13 +515,13 @@ class Styling(gtk.VBox):
             # Draw in response to an expose-event
             __gsignals__ = { "expose-event": "override" }
             
-            def __init__(self,func_bright,colorTuple=None):
+            def __init__(self,func_bright,bash_color=None):
                 super(Styling.ColorsContainer.ColorPreview,self).__init__()
                 
                 self.set_size_request(20,20)
-                self.color=colorTuple
+                self.color = bash_color
                 
-                if colorTuple:
+                if bash_color:
                     self.draw=self._paint_color
                 else:
                     self.draw=self._paint_transparent
@@ -618,20 +554,21 @@ class Styling(gtk.VBox):
             
             def _paint_color(self, cr, width, height):
                 
-                def get_if_less_than_max(x,max=255):
-                    return x if x < max else max;
-                
                 br = self.get_color_brightness()
                 
-                r,g,b = (int(round(get_if_less_than_max(x* {'dark':0.7,'normal':1,'bright':1.4}[br]))) for x in self.color)
+                if br == 'bright':
+                    r,g,b = lighter_rgb(self.color.rgb)
+                elif br =='dark':
+                    r,g,b = darker_rgb(self.color.rgb)
+                else:
+                    r,g,b = self.color.rgb
                 
-                cr.set_source_color(gtk.gdk.color_parse(rgb2hex((r,g,b))))
-                #cr.set_source_rgb(r,g,b)
+                cr.set_source_rgb(r/255.,g/255.,b/255.)
                 
                 cr.rectangle(0, 0, width, height)
                 cr.fill()
         
-        def __init__(self,frameTitle,colorNames,rows=1):
+        def __init__(self,frameTitle,bash_colors,rows=1):
             gobject.GObject.__init__(self)
             
             self.set_label(frameTitle)
@@ -640,9 +577,9 @@ class Styling(gtk.VBox):
             self._can_emit_toggle = True
             self.color_brightness = 'normal'
             
-            colorNames = ['transparent']+colorNames
+            bash_colors = [None]+bash_colors # None will mean 'transparent'
             
-            numColors = len(colorNames)
+            numColors = len(bash_colors)
             
             columns=int(ceil(numColors/float(rows)))
             
@@ -663,17 +600,12 @@ class Styling(gtk.VBox):
                     
                     singleColorBox=gtk.VBox()
                     
-                    colorName=colorNames[col];
+                    color = bash_colors[col]
                     
-                    littleFrame=gtk.Frame()
+                    littleFrame = gtk.Frame()
                     littleFrame.set_border_width(2)
                     
-                    if colorName == 'transparent':
-                        singleColorPreview=Styling.ColorsContainer.ColorPreview(get_color_brigthness,None)
-                    else:
-                        print colorName, colors[colorName]
-                        singleColorPreview=Styling.ColorsContainer.ColorPreview(get_color_brigthness,colors[colorName])
-                    
+                    singleColorPreview = Styling.ColorsContainer.ColorPreview(get_color_brigthness,color)
                     singleColorPreview.show()
                     
                     littleFrame.add(singleColorPreview)
@@ -693,10 +625,9 @@ class Styling(gtk.VBox):
                     
                     singleColorBox.show()
                     
-                    self.colors2radio[colorName]=radioButton
-                    print colorName,radioButton
+                    self.colors2radio[color] = radioButton
                     
-                    signal_id=radioButton.connect('toggled', self._on_color_selected,colorName)
+                    signal_id=radioButton.connect('toggled', self._on_color_selected,color)
                     radioButton._signal_id=signal_id
                     
                     tableColors.attach(singleColorBox,col,col+1,row,row+1)
@@ -708,11 +639,11 @@ class Styling(gtk.VBox):
             
             self.add(tableColors)
         
-        def _on_color_selected(self,widget,colorName):
+        def _on_color_selected(self,widget,color):
             if not widget.get_active() or not self._can_emit_toggle: return
             
             print '_on_color_selected()'
-            self.currentColor = None if colorName=='transparent' else colorName
+            self.currentColor = color
             self.emit('color-selected', self.currentColor)
         
         def set_color_brightness(self,brightness):
@@ -741,17 +672,9 @@ class Styling(gtk.VBox):
                 self.currentColor = TextStyle.INCONSISTENT
                 return
             
-            if isinstance(color,tuple):
-                colorName = RGB_TO_COLORNAME[color]
-            else:
-                colorName = color
-            print 'setting colorname',colorName
-            self.currentColor = colorName
+            self.currentColor = color
             
-            if colorName == None: colorName = 'transparent'
-            print 'now colorName is',colorName
-            
-            newRadioBtn=self.colors2radio[colorName]
+            newRadioBtn = self.colors2radio[color]
             
             self._can_emit_toggle = False
             
@@ -895,11 +818,11 @@ class Styling(gtk.VBox):
         
         vbox = gtk.VBox()
         
-        self.frameBgColors=Styling.ColorsContainer(_('BACKGROUND_COLOR'),COLORNAME_TO_RGB.keys())
+        self.frameBgColors=Styling.ColorsContainer(_('BACKGROUND_COLOR'),COLORS if COLORS==TERM_COLORS else ANSI_COLORS[:8])
         self.frameBgColors.connect('color-selected', lambda *args: self._on_style_changed())
         self.frameBgColors.show()
         
-        self.frameFgColors=Styling.ColorsContainer(_('FOREGROUND_COLOR'),COLORNAME_TO_RGB.keys())
+        self.frameFgColors=Styling.ColorsContainer(_('FOREGROUND_COLOR'),COLORS if COLORS==TERM_COLORS else ANSI_COLORS[:8])
         self.frameFgColors.connect('color-selected', lambda *args: self._on_style_changed())
         self.frameFgColors.show()
         
@@ -1024,10 +947,7 @@ class FormatPromptTextView(gtk.TextView):
         
         table=self.buffer.get_tag_table()
         
-        def get_if_less_than_max(x,max=255):
-            return x if x < max else max;
-        
-        for colorName,rgb in COLORNAME_TO_RGB.iteritems():
+        for color in COLORS:
             
             for weight in (
                 TextStyle.WEIGHT_FAINT,
@@ -1035,19 +955,24 @@ class FormatPromptTextView(gtk.TextView):
                 TextStyle.WEIGHT_BOLD
                 ):
                 
-                r,g,b = (int(round(get_if_less_than_max(x* {'faint':0.7,'normal':1,'bold':1.4}[weight]))) for x in rgb)
+                if weight == TextStyle.WEIGHT_BOLD:
+                    rgb = lighter_rgb(color.rgb)
+                elif weight ==TextStyle.WEIGHT_FAINT:
+                    rgb = darker_rgb(color.rgb)
+                else:
+                    rgb = color.rgb
                 
-                hexCode = rgb2hex((r,g,b))
+                hexCode = rgb2hex(rgb)
                 
-                tag=gtk.TextTag('bg_%s_%s' % (weight,colorName))
+                tag=gtk.TextTag('bg_%s_%s' % (weight,color))
                 tag.set_property('background',hexCode)
                 table.add(tag)
-                tag._backgroundColorName = colorName
+                tag._backgroundColor = color
                 
-                tag=gtk.TextTag('fg_%s_%s' % (weight,colorName))
+                tag=gtk.TextTag('fg_%s_%s' % (weight,color))
                 tag.set_property('foreground',hexCode)
                 table.add(tag)
-                tag._foregroundColorName = colorName
+                tag._foregroundColor = color
         
         for weight in (
                 ('faint',pango.WEIGHT_ULTRALIGHT),
@@ -1060,8 +985,8 @@ class FormatPromptTextView(gtk.TextView):
         
         for command in COMMANDS:
             tag=gtk.TextTag(command.keyword)
-            tag._foregroundColorName = None
-            tag._backgroundColorName = None
+            tag._foregroundColor = None
+            tag._backgroundColor = None
             table.add(tag)
         
         tag=gtk.TextTag('underline')
@@ -1108,13 +1033,13 @@ class FormatPromptTextView(gtk.TextView):
     def change_base_colors(self,tstyle):
         if not tstyle.is_inconsistent('background'):
             if tstyle.background:
-                self.modify_base(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(tstyle.background)))
+                self.modify_base(gtk.STATE_NORMAL,gtk.gdk.color_parse(tstyle.background.hexcolor))
             else:
                 self.modify_base(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(FormatPromptTextView.DEFAULT_BACKGROUND)))
         
         if not tstyle.is_inconsistent('foreground'):
             if tstyle.foreground:
-                self.modify_text(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(tstyle.foreground)))
+                self.modify_text(gtk.STATE_NORMAL,gtk.gdk.color_parse(tstyle.foreground.hexcolor))
             else:
                 self.modify_text(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(FormatPromptTextView.DEFAULT_FOREGROUND)))
             
@@ -1165,22 +1090,22 @@ class FormatPromptTextView(gtk.TextView):
         def get_inconsistent_tags(tstyle,tag_table):
             tags = []
             if tstyle.is_inconsistent('background'):
-                for colorName in COLORNAME_TO_RGB:
+                for color in COLORS:
                     for weight in (
                         TextStyle.WEIGHT_FAINT,
                         TextStyle.WEIGHT_NORMAL,
                         TextStyle.WEIGHT_BOLD
                         ):
-                        tags.append(tag_table.lookup('bg_' + weight + '_'+colorName))
+                        tags.append(tag_table.lookup('bg_%s_%s' % (weight,color)))
             
             if tstyle.is_inconsistent('foreground'):
-                for colorName in COLORNAME_TO_RGB:
+                for color in COLORS:
                     for weight in (
                         TextStyle.WEIGHT_FAINT,
                         TextStyle.WEIGHT_NORMAL,
                         TextStyle.WEIGHT_BOLD
                         ):
-                        tags.append(tag_table.lookup('fg_' + weight + '_' + colorName))
+                        tags.append(tag_table.lookup('fg_%s_%s' % (weight,color)))
             if tstyle.is_inconsistent('strikethrough'):
                 tags.append(tag_table.lookup('strikethrough'))
             if tstyle.is_inconsistent('underline'):
@@ -1468,6 +1393,9 @@ class Window(gtk.Window):
         self.set_border_width(5)
         self.connect('delete-event',self.on_delete_event)
         
+        #self.colors = TERM_COLORS
+        self.colors = ANSI_COLORS
+        
         vbox=gtk.VBox()
         
         menu_bar_ui = \
@@ -1694,14 +1622,15 @@ class Window(gtk.Window):
     def create_terminal(self):
         term=shell.ShellWidget()
         try:
-            colors = shell.getGnomeTerminalColors()
+            gdkColors = shell.getGnomeTerminalColors()
         except:
-            colors = {
-                'foreground' : gtk.gdk.color_parse(ANSI_COLORS[15]),
-                'background' : gtk.gdk.color_parse(ANSI_COLORS[0]),
-                'palette'    : [gtk.gdk.color_parse(hex) for hex in ANSI_COLORS]
+            gdkColors = {
+                'foreground' : gtk.gdk.color_parse(COLORS[15].hexcolor),
+                'background' : gtk.gdk.color_parse(COLORS[0].hexcolor),
+                'palette'    : [gtk.gdk.color_parse(col.hexcolor) for col in ANSI_COLORS]
             }
-        term.set_colors(colors['foreground'],colors['background'],colors['palette'])
+        
+        term.set_colors(gdkColors['foreground'],gdkColors['background'],gdkColors['palette'])
         term.set_size(term.get_column_count(),10)
         return term
     
@@ -1858,13 +1787,13 @@ class Window(gtk.Window):
                 
                 if tstyle.background:
                     if not tstyle.is_inconsistent('background'):
-                        self.term.set_color_background(gtk.gdk.color_parse(rgb2hex(tstyle.background)))
+                        self.term.set_color_background(gtk.gdk.color_parse(tstyle.background.hexcolor))
                 else:
                     self.term.set_color_background(gtk.gdk.color_parse(rgb2hex(FormatPromptTextView.DEFAULT_BACKGROUND)))
                 
                 if tstyle.foreground:
                     if not tstyle.is_inconsistent('foreground'):
-                        self.term.set_color_foreground(gtk.gdk.color_parse(rgb2hex(tstyle.foreground)))
+                        self.term.set_color_foreground(gtk.gdk.color_parse(tstyle.foreground.hexcolor))
                 else:
                     self.term.set_color_foreground(gtk.gdk.color_parse(rgb2hex(FormatPromptTextView.DEFAULT_FOREGROUND)))
                 

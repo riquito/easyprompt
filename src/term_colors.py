@@ -1,5 +1,5 @@
 
-TERM_COLORS = [
+_hex_term_colors = [
     
     "#000000",   # 0 black
     "#ff0000",   # 1 red
@@ -261,6 +261,99 @@ TERM_COLORS = [
     "#eeeeee"    # 255
 ]
 
-GRAYSCALE = TERM_COLORS[232:] # dark to bright, missing black (0) and white (15)
+_hex_grayscale = _hex_term_colors[232:] # dark to bright, missing black (0) and white (15)
 
-ANSI_COLORS = TERM_COLORS[0:16]
+_hex_ansi_colors = _hex_term_colors[0:16]
+
+
+def rgb2hex(colorTuple):
+    esa = ['#']
+    for col in colorTuple:
+        ascii=str(hex(col))
+        esa.append(len(ascii)==4 and ascii[-2:] or ('0'+ascii[-1:]))
+    return ''.join(esa)
+
+def hex2rgb(hexColor):
+    if hexColor[0] == '#': hexColor = hexColor[1:]
+    elif hexColor[0:2].lower() == '0x': hexColor = hexColor[2:]
+    
+    if len(hexColor) == 3:
+        hexColor = ''.join(val for val in hexColor for i in range(2))
+    elif len(hexColor) == 12:
+        hexColor = hexColor[0]*2+hexColor[4]*2+hexColor[8]*2
+    
+    return int(hexColor[0:2], 16), int(hexColor[2:4], 16), int(hexColor[4:6], 16)
+
+from colorsys import rgb_to_hsv, hsv_to_rgb
+def lighter_rgb(colorTuple):
+    hsv = rgb_to_hsv(*(x/255. for x in colorTuple))
+    return tuple(int(round(x*255)) for x in hsv_to_rgb(hsv[0],min(1,hsv[1]*1.10),min(1,hsv[2]*1.25)))
+
+def darker_rgb(colorTuple):
+    hsv = rgb_to_hsv(*(x/255. for x in colorTuple))
+    return tuple(int(round(x*255)) for x in hsv_to_rgb(hsv[0],min(1,hsv[1]*0.90),min(1,hsv[2]*0.75)))
+
+class BashColor:
+    def __init__(self,hexcolor,bashIndex):
+        self.hexcolor = hexcolor
+        self.index = bashIndex
+        self.rgb = hex2rgb(self.hexcolor)
+    
+    def getEscapeCode(self,isBackground=False):
+        colorCode = self.index
+        styleCode = ''
+        
+        if isBackground:
+            styleCode = '7;'
+        
+        return '%s%d' % (styleCode,colorCode)
+    
+    def __str__(self):
+        return self.__unicode__().encode('utf-8')
+    
+    def __unicode__(self):
+        return u'<%s %s idx(%d)>' % (self.__class__,self.hexcolor,self.index)
+    
+    def __eq__(self,obj):
+        if isinstance(obj,BashColor):
+            return obj.hexcolor==self.hexcolor
+        else:
+            return False
+        
+    def __hash__(self):
+        return hash('%s idx(%d)' % (self.hexcolor,self.index))
+    
+    @staticmethod
+    def getAllColors():
+        return BASH_TERM_COLORS
+    
+
+class ANSIColor(BashColor):
+    def getEscapeCode(self,isBackground=False):        
+        colorCode = self.index
+        styleCode = ''
+        
+        if isBackground:
+            if colorCode > 8:
+                colorCode -= 8
+            
+            colorCode += 40
+            
+        else:
+            if colorCode > 8:
+                # it's a light version
+                styleCode = '1;'
+                colorCode -= 8
+            
+            colorCode += 30
+        
+        return '%s%d' % (styleCode,colorCode)
+    
+    @staticmethod
+    def getAllColors():
+        return BASH_ANSI_COLORS
+
+
+TERM_COLORS = [BashColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_term_colors)]
+ANSI_COLORS = [ANSIColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_ansi_colors)]
+GRAYSCALE = [BashColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_grayscale)]

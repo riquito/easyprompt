@@ -33,8 +33,8 @@ def getGnomeTerminalColors(profile="Default"):
     bg_color = x.get_string(GCONF_PROFILE_DIR + "/background_color")
     
     return {
-        "foreground" : gtk.gdk.color_parse (fg_color),
-        "background" : gtk.gdk.color_parse (bg_color),
+        "foreground" : gtk.gdk.color_parse(fg_color),
+        "background" : gtk.gdk.color_parse(bg_color),
         "palette" : gdk_palette
     }
 
