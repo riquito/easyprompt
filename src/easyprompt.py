@@ -22,6 +22,20 @@ from i18n import _
 COLORS = ANSI_COLORS
 #COLORS = TERM_COLORS
 
+try:
+    for idx,gdkColor in enumerate(shell.getGnomeTerminalColors()['palette']):
+        # substitute initial colors with the palette colors
+        
+        hexCode = gdkColor.to_string()
+        
+        TERM_COLORS[idx] = BashColor(hexCode,idx)
+        
+        if idx < 16:
+            ANSI_COLORS[idx] = ANSIColor(hexCode,idx)
+        
+except (Exception),e:
+    raise e
+
 gtk.rc_parse_string(\
  'style "default" { \
     GtkTextView::cursor_color    = "#cc0000" \

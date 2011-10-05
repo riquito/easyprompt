@@ -273,7 +273,7 @@ def rgb2hex(colorTuple):
         esa.append(len(ascii)==4 and ascii[-2:] or ('0'+ascii[-1:]))
     return ''.join(esa)
 
-def hex2rgb(hexColor):
+def _normalizeHexColor(hexColor):
     if hexColor[0] == '#': hexColor = hexColor[1:]
     elif hexColor[0:2].lower() == '0x': hexColor = hexColor[2:]
     
@@ -282,6 +282,10 @@ def hex2rgb(hexColor):
     elif len(hexColor) == 12:
         hexColor = hexColor[0]*2+hexColor[4]*2+hexColor[8]*2
     
+    return hexColor
+
+def hex2rgb(hexColor):
+    hexColor = _normalizeHexColor(hexColor)
     return int(hexColor[0:2], 16), int(hexColor[2:4], 16), int(hexColor[4:6], 16)
 
 from colorsys import rgb_to_hsv, hsv_to_rgb
@@ -295,7 +299,7 @@ def darker_rgb(colorTuple):
 
 class BashColor:
     def __init__(self,hexcolor,bashIndex):
-        self.hexcolor = hexcolor
+        self.hexcolor = '#'+_normalizeHexColor(hexcolor)
         self.index = bashIndex
         self.rgb = hex2rgb(self.hexcolor)
     
@@ -322,6 +326,9 @@ class BashColor:
         
     def __hash__(self):
         return hash('%s idx(%d)' % (self.hexcolor,self.index))
+    
+    def __repr__(self):
+        return str(self)
     
     @staticmethod
     def getAllColors():
