@@ -166,6 +166,9 @@ def has_tag_in_range(tag,startIter,endIter):
     
     return taggedIter
 
+def get_color_tag_name(color,weight,background=False):
+    return '%s_%s_%s' % ('bg' if background else 'fg',weight,color)
+
 
 class TextStyle:
     INCONSISTENT = -1
@@ -327,17 +330,15 @@ class TextStyle:
                 
                 if attrName in ('background','foreground'):
                     fakeAttrName = attrName
+                    color = value
                     
                     if tstyle.invert and not tstyle.is_inconsistent('invert'):
                         fakeAttrName = 'background' if attrName == 'foreground' else 'foreground'
                     
-                    tag = tag_table.lookup(
-                        {
-                            'foreground':'fg_'+tstyle.get('weight')+'_%s',
-                            'background':'bg_normal_%s'
-                        }[fakeAttrName] % value)
+                    tag = tag_table.lookup(get_color_tag_name(color,tstyle.get('weight'),fakeAttrName=='background'))
+                    
                     tags.append(tag)
-                    setattr(tag,'_'+fakeAttrName+'Color',value)
+                    setattr(tag,'_'+fakeAttrName+'Color',color)
                     
                 else:
                     tag = tag_table.lookup(attrName)
@@ -978,12 +979,12 @@ class FormatPromptTextView(gtk.TextView):
                 
                 hexCode = rgb2hex(rgb)
                 
-                tag=gtk.TextTag('bg_%s_%s' % (weight,color))
+                tag=gtk.TextTag(get_color_tag_name(color,weight,background=True))
                 tag.set_property('background',hexCode)
                 table.add(tag)
                 tag._backgroundColor = color
                 
-                tag=gtk.TextTag('fg_%s_%s' % (weight,color))
+                tag=gtk.TextTag(get_color_tag_name(color,weight,background=False))
                 tag.set_property('foreground',hexCode)
                 table.add(tag)
                 tag._foregroundColor = color
@@ -1110,7 +1111,7 @@ class FormatPromptTextView(gtk.TextView):
                         TextStyle.WEIGHT_NORMAL,
                         TextStyle.WEIGHT_BOLD
                         ):
-                        tags.append(tag_table.lookup('bg_%s_%s' % (weight,color)))
+                        tags.append(tag_table.lookup(get_color_tag_name(color,weight,background=True)))
             
             if tstyle.is_inconsistent('foreground'):
                 for color in COLORS:
@@ -1119,7 +1120,7 @@ class FormatPromptTextView(gtk.TextView):
                         TextStyle.WEIGHT_NORMAL,
                         TextStyle.WEIGHT_BOLD
                         ):
-                        tags.append(tag_table.lookup('fg_%s_%s' % (weight,color)))
+                        tags.append(tag_table.lookup(get_color_tag_name(color,weight,background=False)))
             if tstyle.is_inconsistent('strikethrough'):
                 tags.append(tag_table.lookup('strikethrough'))
             if tstyle.is_inconsistent('underline'):
