@@ -16,7 +16,7 @@ from math import floor,ceil
 
 import shell
 from term_colors import (BashColor,ANSIColor,TERM_COLORS,ANSI_COLORS,GRAYSCALE,
-                         lighter_rgb,darker_rgb,rgb2hex)
+                         lighter_rgb,darker_rgb,rgb2hex,TextStyle)
 from i18n import _
 
 COLORS = ANSI_COLORS
@@ -54,7 +54,7 @@ class CommandPlugin(object):
         self.keyword = plugin['keyword']
         self.bash_command = plugin['command']
         self.example = plugin['example']
-        self.tstyle  = TextStyle()
+        self.tstyle  = GtkTextStyle()
         self._desc    = plugin['desc']
         
         self._lowerKeyword = self.keyword.lower()
@@ -170,150 +170,68 @@ def get_color_tag_name(color,weight,background=False):
     return '%s_%s_%s' % ('bg' if background else 'fg',weight,color)
 
 
-class TextStyle:
-    INCONSISTENT = -1
-    
-    WEIGHT_NORMAL = 'normal'
-    WEIGHT_BOLD = 'bold'
-    WEIGHT_FAINT = 'faint'
-    
-    def __init__(self):
-        self.background = None
-        self.foreground = None
-        self.underline = None
-        self.strikethrough = None
-        self.weight = None
-        self.invert = None
-    
-    def __str__(self):
-        return self.__unicode__().encode('utf-8')
-    
-    def __unicode__(self):
-        map = {}
-        if self.background:
-            if self.is_inconsistent('background'):
-                map['background'] = TextStyle.INCONSISTENT
-            else:
-                map['background'] = self.background.hexcolor
-        
-        if self.foreground:
-            if self.is_inconsistent('foreground'):
-                map['foreground'] = TextStyle.INCONSISTENT
-            else:
-                map['foreground'] = self.foreground.hexcolor
-        
-        if self.underline: map['underline'] = self.underline
-        if self.strikethrough: map['strikethrough'] = self.strikethrough
-        if self.weight: map['weight'] = self.weight
-        if self.invert: map['invert'] = self.invert
-        
-        return u'<TextStyle '+u' '.join(('%s="%s"' % (key,value)) for key,value in map.iteritems())+u'>'
-    
-    def _ensureColor(self,color):
-        if isinstance(color,BashColor):
-            return color
-        
-        if isinstance(color,tuple):
-            hex = rgb2hex(color)
-        elif color.startswith('#'):
-            hex = color
-        
-        for i in COLORS:
-            if i.hexcolor == color:
-                return i
-        
-        raise Exception('not a (known?) color [%s]' % color)
-        
-    
-    def calculate_background(self):
-        return self.foreground if self.invert else self.background
-    
-    def calculate_foreground(self):
-        return self.background if self.invert else self.foreground
-        
-    def set(self,attrName,value):
-        if attrName == 'background' or attrName == 'foreground':
-            if not (value == None or value == TextStyle.INCONSISTENT):
-                value = self._ensureColor(value)
-        
-        setattr(self,attrName,value)
-    
-    def get(self,attrName):
-        return getattr(self,attrName)
-    
-    def unset(self,attrName):
-        setattr(self,attrName,None)
-    
-    def set_inconsistent(self,attrName):
-        setattr(self,attrName,TextStyle.INCONSISTENT)
-    
-    def is_inconsistent(self,attrName):
-        return getattr(self,attrName) == TextStyle.INCONSISTENT
+class GtkTextStyle(TextStyle):
     
     @staticmethod
     def update_gtk_tag(tag,tstyle):
         if tstyle.invert and not tstyle.is_inconsistent('invert'):
             tag.invert = True;
         
-        for attrName in ('underline','strikethrough','background','foreground'):
+        for attrName in (GtkTextStyle.BACKGROUND,GtkTextStyle.FOREGROUND):
             
-            if not tstyle.is_inconsistent(attrName):
-                value = tstyle.get(attrName)
+            if tstyle.is_inconsistent(attrName):
+                continue
+            
+            color = getattr(tstyle,attrName)
+            
+            attrTag = 'background' if attrName==GtkTextStyle.BACKGROUND else 'foreground'
+            if tstyle.invert==True: # True to check for inconsistencies too
+                attrTag = 'foreground' if attrTag=='background' else 'background'
+            
+            setattr(tag,'_%sColor' % attrTag, color)
+            
+            if color == None:
+                tag.set_property(attrTag+'-set',False)
+            else:
                 
-                if attrName in ('background','foreground'):
+                if attrTag == 'foreground':
                     
-                    fakeAttrName = attrName
+                    if tstyle.weight == GtkTextStyle.WEIGHT_BOLD:
+                        rgb = lighter_rgb(color.rgb)
+                    elif tstyle.weight == GtkTextStyle.WEIGHT_FAINT:
+                        rgb = darker_rgb(color.rgb)
+                    else: # normal or inconsistent
+                        rgb = color.rgb
                     
-                    if tstyle.invert and not tstyle.is_inconsistent('invert'):
-                        fakeAttrName = 'background' if attrName == 'foreground' else 'foreground'
-                    
-                    if value == None:
-                        tag.set_property(fakeAttrName+'-set',False)
-                        setattr(tag,'_'+fakeAttrName+'Color',None)
-                    else:
-                        setattr(tag,'_'+fakeAttrName+'Color', value)
-                        
-                        weight = tstyle.get('weight')
-                        if not weight or tstyle.is_inconsistent('weight'):
-                            weight = TextStyle.WEIGHT_NORMAL
-                        
-                        if fakeAttrName == 'foreground':
-                            
-                            if weight == TextStyle.WEIGHT_BOLD:
-                                rgb = lighter_rgb(value.rgb)
-                            elif weight == TextStyle.WEIGHT_FAINT:
-                                rgb = darker_rgb(value.rgb)
-                            else:
-                                rgb = value.rgb
-                            
-                            hexcolor = rgb2hex(rgb)
-                        else:
-                            hexcolor = value.hexcolor
-                        
-                        tag.set_property(fakeAttrName,hexcolor)
-                        tag.set_property(fakeAttrName+'-set',True)
-                    
+                    hexcolor = rgb2hex(rgb)
                 else:
-                    if value == None: value = False
-                    
-                    tag.set_property(attrName,value)
-                    tag.set_property(attrName+'-set',value)
+                    hexcolor = color.hexcolor
+                
+                tag.set_property(attrTag,hexcolor)
+                tag.set_property(attrTag+'-set',True)
+        
+        for attrName in (GtkTextStyle.UNDERLINE,GtkTextStyle.STRIKETHROUGH):
+            
+            if tstyle.is_inconsistent(attrName):
+                continue
+            
+            value = getattr(tstyle,attrName)
+            
+            tag.set_property(attrName,value)
+            tag.set_property(attrName+'-set',value)
         
         if not tstyle.is_inconsistent('weight'):
-            value = tstyle.get('weight')
+            weight = tstyle.weight
             
-            if value == None:
-                tag.set_property('weight',pango.WEIGHT_NORMAL)
-                tag.set_property('weight-set',False)
+            if weight == GtkTextStyle.WEIGHT_FAINT:
+                pangoProp = pango.WEIGHT_ULTRALIGHT
+            elif weight == GtkTextStyle.WEIGHT_BOLD:
+                pangoProp = pango.WEIGHT_BOLD
             else:
-                if value == TextStyle.WEIGHT_FAINT:
-                    tag.set_property('weight',pango.WEIGHT_ULTRALIGHT)
-                elif value == TextStyle.WEIGHT_BOLD:
-                    tag.set_property('weight',pango.WEIGHT_BOLD)
-                else:
-                    tag.set_property('weight',pango.WEIGHT_NORMAL)
-                
-                tag.set_property('weight-set',True)
+                pangoProp = pango.WEIGHT_NORMAL
+            
+            tag.set_property('weight',pangoProp)
+            tag.set_property('weight-set',True)
         
         return tag
     
@@ -324,9 +242,9 @@ class TextStyle:
         
         for attrName in ('underline','strikethrough','background','foreground'):
             
-            value = tstyle.get(attrName)
+            value = getattr(tstyle,attrName)
             
-            if value and not value == TextStyle.INCONSISTENT:
+            if value and not value == GtkTextStyle.INCONSISTENT:
                 
                 if attrName in ('background','foreground'):
                     fakeAttrName = attrName
@@ -335,7 +253,7 @@ class TextStyle:
                     if tstyle.invert and not tstyle.is_inconsistent('invert'):
                         fakeAttrName = 'background' if attrName == 'foreground' else 'foreground'
                     
-                    tag = tag_table.lookup(get_color_tag_name(color,tstyle.get('weight'),fakeAttrName=='background'))
+                    tag = tag_table.lookup(get_color_tag_name(color,tstyle.weight,fakeAttrName=='background'))
                     
                     tags.append(tag)
                     setattr(tag,'_'+fakeAttrName+'Color',color)
@@ -346,13 +264,13 @@ class TextStyle:
                     tags.append(tag)
         
         if not tstyle.is_inconsistent('weight'):
-            value = tstyle.get('weight')
+            value = tstyle.weight
             
-            if value == TextStyle.WEIGHT_FAINT:
+            if value == GtkTextStyle.WEIGHT_FAINT:
                 tags.append(tag_table.lookup('weight_faint'))
-            elif value == TextStyle.WEIGHT_BOLD:
+            elif value == GtkTextStyle.WEIGHT_BOLD:
                 tags.append(tag_table.lookup('weight_bold'))
-            elif value == TextStyle.WEIGHT_NORMAL:
+            elif value == GtkTextStyle.WEIGHT_NORMAL:
                 tags.append(tag_table.lookup('weight_normal'))
         
         if tstyle.invert and not tstyle.is_inconsistent('invert'):
@@ -365,39 +283,35 @@ class TextStyle:
     @staticmethod
     def from_gtk_tag(tag):
         
-        tstyle = TextStyle()
-        
-        tagName = tag.get_property('name')
-        
-        if tag.get_property('name') == 'invert':
-            tstyle.set('invert',True)
+        tstyle = GtkTextStyle()
+        tstyle.invert = tag.get_property('name') == 'invert'
         
         if tag.get_property('background-set'):
             attrName = 'foreground' if tstyle.invert else 'background'
-            color = getattr(tag,'_'+attrName+'Color',None)
-            tstyle.set(attrName,color)
+            color = getattr(tag,'_%sColor' % attrName,None)
+            setattr(tstyle,attrName,color)
         
         if tag.get_property('foreground-set'):
             attrName = 'background' if tstyle.invert else 'foreground'
-            color = getattr(tag,'_'+attrName+'Color',None)
-            tstyle.set(attrName,color)
+            color = getattr(tag,'_%sColor' % attrName,None)
+            setattr(tstyle,attrName,color)
         
         if tag.get_property('underline-set'):
-            tstyle.set('underline',tag.get_property('underline'))
+            tstyle.underline = tag.get_property('underline')
         
         if tag.get_property('strikethrough-set'):
-            tstyle.set('strikethrough',tag.get_property('strikethrough'))
+            tstyle.strikethrough = tag.get_property('strikethrough')
             
         if tag.get_property('weight-set'):
             
             pangoWeight = tag.get_property('weight')
             
             if pangoWeight == pango.WEIGHT_BOLD:
-                tstyle.set('weight',TextStyle.WEIGHT_BOLD)
+                tstyle.weight = GtkTextStyle.WEIGHT_BOLD
             elif pangoWeight == pango.WEIGHT_ULTRALIGHT:
-                tstyle.set('weight',TextStyle.WEIGHT_FAINT)
+                tstyle.weight = GtkTextStyle.WEIGHT_FAINT
             else:
-                tstyle.set('weight',TextStyle.WEIGHT_NORMAL)
+                tstyle.weight = GtkTextStyle.WEIGHT_NORMAL
         
         return tstyle
        
@@ -412,102 +326,22 @@ class TextStyle:
             singleCharStyles = []
             
             for tag in currentIter.get_tags():
-                print 'tagName',tag.get_property('name')
-                singleCharStyles.append(TextStyle.from_gtk_tag(tag))
-                print 'tag style',singleCharStyles[-1]
+                singleCharStyles.append(GtkTextStyle.from_gtk_tag(tag))
             
-            text_styles.append(TextStyle.merge_styles(singleCharStyles,fill_empty_properties=True))
+            text_styles.append(GtkTextStyle.merge_styles(singleCharStyles,fill_empty_properties=True))
             
             currentIter.forward_char()
         
-        tstyle = TextStyle.merge_styles(text_styles)
         
-        if tstyle.invert and not tstyle.is_inconsistent('invert'):
+        print 'text styles',text_styles
+        tstyle = GtkTextStyle.merge_styles(text_styles)
+        print 'now tstyle',tstyle
+        
+        if tstyle.invert==True:
             tstyle.background, tstyle.foreground = tstyle.foreground, tstyle.background
         print 'from gtk selection',tstyle
         return tstyle
     
-    @staticmethod
-    def merge_styles(text_styles,fill_empty_properties=False):
-        if not len(text_styles): return TextStyle()
-        
-        tstyle = text_styles[0]
-        
-        for ts in text_styles[1:]:
-            
-            for attrName in ('underline','strikethrough','background','foreground','weight','invert'):
-                
-                currentValue = tstyle.get(attrName)
-                newValue = ts.get(attrName)
-                
-                if currentValue != newValue:
-                    
-                    if fill_empty_properties and (currentValue == None or newValue == None):
-                        tstyle.set(attrName,currentValue if newValue == None else newValue)
-                    else:
-                        tstyle.set_inconsistent(attrName)
-        
-        return tstyle
-    
-    @staticmethod
-    def to_bash_code(tstyle):
-        
-        codes = []
-        
-        if tstyle.weight and not tstyle.is_inconsistent('weight'):
-            codes.append({
-                TextStyle.WEIGHT_NORMAL : 0,
-                TextStyle.WEIGHT_BOLD : 1,
-                TextStyle.WEIGHT_FAINT : 2
-                }[tstyle.weight]
-            )
-        
-        if tstyle.underline and not tstyle.is_inconsistent('underline'):
-            codes.append(4)
-        
-        if tstyle.strikethrough and not tstyle.is_inconsistent('strikethrough'):
-            codes.append(9)
-        
-        if tstyle.invert and not tstyle.is_inconsistent('invert'):
-            codes.append(7)
-        
-        if tstyle.background and not tstyle.is_inconsistent('background'):
-            codes.append(tstyle.background.getEscapeCode(isBackground=True))
-        
-        if tstyle.foreground and not tstyle.is_inconsistent('foreground'):
-            codes.append(tstyle.foreground.getEscapeCode())
-        
-        if len(codes):
-            return r'\e[%sm' % ';'.join(str(x) for x in codes)
-        else:
-            return ''
-        
-    @staticmethod
-    def from_bash_code_values(values):
-        tstyle = TextStyle()
-        
-        for val in values:
-            
-            if val == 0:
-                tstyle.weight = TextStyle.WEIGHT_NORMAL
-            elif val == 1:
-                tstyle.weight = TextStyle.WEIGHT_BOLD
-            elif val == 2:
-                tstyle.weight = TextStyle.WEIGHT_FAINT
-            elif val == 4:
-                tstyle.underline = True
-            elif val == 7:
-                tstyle.invert = True
-            elif val == 9:
-                tstyle.strikethrough = True
-            elif 30 <= val <= 37:
-                tstyle.foreground = ANSI_COLORS[val-30]
-            elif 40 <= val <= 47:
-                tstyle.background = ANSI_COLORS[val-40+8]
-            
-            # XXX TODO doesn't work with 256 colors (usually are something like 38;5;colorCode)
-        
-        return tstyle
 
 class Styling(gtk.VBox):
     __gsignals__ = {
@@ -664,10 +498,10 @@ class Styling(gtk.VBox):
         def set_color_brightness(self,brightness):
             try:
                 brightness = {
-                    TextStyle.WEIGHT_BOLD:'bright',
-                    TextStyle.WEIGHT_FAINT:'dark',
-                    TextStyle.WEIGHT_NORMAL:'normal',
-                    TextStyle.INCONSISTENT:'normal'
+                    GtkTextStyle.WEIGHT_BOLD:'bright',
+                    GtkTextStyle.WEIGHT_FAINT:'dark',
+                    GtkTextStyle.WEIGHT_NORMAL:'normal',
+                    GtkTextStyle.INCONSISTENT:'normal'
                 }[brightness]
                 
             except KeyError:
@@ -677,14 +511,14 @@ class Styling(gtk.VBox):
             self.queue_draw()
         
         def get_color(self):
-            '''Return the color name or TextStyle.INCONSISTENT'''
+            '''Return the color name or GtkTextStyle.INCONSISTENT'''
             return self.currentColor
         
-        def set_color(self,color=TextStyle.INCONSISTENT):
+        def set_color(self,color=GtkTextStyle.INCONSISTENT):
             print 'set_color',color
-            if color == TextStyle.INCONSISTENT:
+            if color == GtkTextStyle.INCONSISTENT:
                 self.invisibleRadioBtn.set_active(True)
-                self.currentColor = TextStyle.INCONSISTENT
+                self.currentColor = GtkTextStyle.INCONSISTENT
                 return
             
             self.currentColor = color
@@ -760,23 +594,24 @@ class Styling(gtk.VBox):
                 self.emit('style-changed')
         
         def get_styles(self):
-            tstyle = TextStyle()
+            tstyle = GtkTextStyle()
             
             if self.weightRadioInconsistent.get_active():
                 tstyle.set_inconsistent('weight')
             elif self.boldRadio.get_active():
-                tstyle.weight = TextStyle.WEIGHT_BOLD
+                tstyle.weight = GtkTextStyle.WEIGHT_BOLD
             elif self.faintRadio.get_active():
-                tstyle.weight = TextStyle.WEIGHT_FAINT
+                tstyle.weight = GtkTextStyle.WEIGHT_FAINT
             else:
-                tstyle.weight = TextStyle.WEIGHT_NORMAL
+                tstyle.weight = GtkTextStyle.WEIGHT_NORMAL
             
             for attrName in ('underline','strikethrough','invert'):
                 toggleBtn = getattr(self,attrName+'Btn')
                 if toggleBtn.get_inconsistent():
                     tstyle.set_inconsistent(attrName)
                 else:
-                    tstyle.set(attrName,toggleBtn.get_active())
+                    setattr(tstyle,attrName,toggleBtn.get_active())
+                print attrName,toggleBtn.get_inconsistent(),toggleBtn.get_active()
             
             return tstyle
         
@@ -790,14 +625,14 @@ class Styling(gtk.VBox):
                     toggleBtn.set_inconsistent(True)
                 else:
                     toggleBtn.set_inconsistent(False)
-                    toggleBtn.set_active(tstyle.get(attrName) == True)
+                    toggleBtn.set_active(getattr(tstyle,attrName) == True)
             
             if tstyle.is_inconsistent('weight'):
                 self.weightRadioInconsistent.set_active(True)
             else:
-                self.normalRadio.set_active(tstyle.weight == TextStyle.WEIGHT_NORMAL)
-                self.boldRadio.set_active(tstyle.weight == TextStyle.WEIGHT_BOLD)
-                self.faintRadio.set_active(tstyle.weight == TextStyle.WEIGHT_FAINT)
+                self.normalRadio.set_active(tstyle.weight == GtkTextStyle.WEIGHT_NORMAL)
+                self.boldRadio.set_active(tstyle.weight == GtkTextStyle.WEIGHT_BOLD)
+                self.faintRadio.set_active(tstyle.weight == GtkTextStyle.WEIGHT_FAINT)
             
             self._can_send_signals=True
     
@@ -860,13 +695,15 @@ class Styling(gtk.VBox):
     
     def reset(self):
         self.set_current_command(self.get_current_command())
-        self.set_styling(TextStyle()) 
+        self.set_styling(GtkTextStyle()) 
         self.emit('changed')
     
     def _export_current_style(self):
         tstyle = self.frameStyles.get_styles()
-        tstyle.set('background',self.frameBgColors.get_color())
-        tstyle.set('foreground',self.frameFgColors.get_color())
+        print 'riq',tstyle
+        tstyle.background = self.frameBgColors.get_color()
+        tstyle.foreground = self.frameFgColors.get_color()
+        print 'riq2',tstyle
         return tstyle
     
     def _on_style_changed(self):
@@ -920,7 +757,7 @@ class Styling(gtk.VBox):
         self._is_command_active = False
         self.gtkCommandsBox.set_sensitive(False)
         
-        tstyle = TextStyle()
+        tstyle = GtkTextStyle()
         tstyle.set_inconsistent('background')
         tstyle.set_inconsistent('foreground')
         
@@ -965,14 +802,14 @@ class FormatPromptTextView(gtk.TextView):
         for color in COLORS:
             
             for weight in (
-                TextStyle.WEIGHT_FAINT,
-                TextStyle.WEIGHT_NORMAL,
-                TextStyle.WEIGHT_BOLD
+                GtkTextStyle.WEIGHT_FAINT,
+                GtkTextStyle.WEIGHT_NORMAL,
+                GtkTextStyle.WEIGHT_BOLD
                 ):
                 
-                if weight == TextStyle.WEIGHT_BOLD:
+                if weight == GtkTextStyle.WEIGHT_BOLD:
                     rgb = lighter_rgb(color.rgb)
-                elif weight ==TextStyle.WEIGHT_FAINT:
+                elif weight ==GtkTextStyle.WEIGHT_FAINT:
                     rgb = darker_rgb(color.rgb)
                 else:
                     rgb = color.rgb
@@ -1096,7 +933,7 @@ class FormatPromptTextView(gtk.TextView):
         tag=tagTable.lookup(command.keyword)
         
         print 'key',command,command.tstyle
-        TextStyle.update_gtk_tag(tag,command.tstyle)
+        GtkTextStyle.update_gtk_tag(tag,command.tstyle)
     
     def change_selection_appearance(self,tstyle,startIter,endIter):
         
@@ -1107,18 +944,18 @@ class FormatPromptTextView(gtk.TextView):
             if tstyle.is_inconsistent('background'):
                 for color in COLORS:
                     for weight in (
-                        TextStyle.WEIGHT_FAINT,
-                        TextStyle.WEIGHT_NORMAL,
-                        TextStyle.WEIGHT_BOLD
+                        GtkTextStyle.WEIGHT_FAINT,
+                        GtkTextStyle.WEIGHT_NORMAL,
+                        GtkTextStyle.WEIGHT_BOLD
                         ):
                         tags.append(tag_table.lookup(get_color_tag_name(color,weight,background=True)))
             
             if tstyle.is_inconsistent('foreground'):
                 for color in COLORS:
                     for weight in (
-                        TextStyle.WEIGHT_FAINT,
-                        TextStyle.WEIGHT_NORMAL,
-                        TextStyle.WEIGHT_BOLD
+                        GtkTextStyle.WEIGHT_FAINT,
+                        GtkTextStyle.WEIGHT_NORMAL,
+                        GtkTextStyle.WEIGHT_BOLD
                         ):
                         tags.append(tag_table.lookup(get_color_tag_name(color,weight,background=False)))
             if tstyle.is_inconsistent('strikethrough'):
@@ -1145,7 +982,7 @@ class FormatPromptTextView(gtk.TextView):
             
             currentIter.forward_char()
         
-        tags = TextStyle.to_gtk_tags(tstyle,tag_table)
+        tags = GtkTextStyle.to_gtk_tags(tstyle,tag_table)
         for tag in tags:
             print tag.get_property('name')
             self.buffer.apply_tag(tag,startIter,endIter)
@@ -1574,9 +1411,9 @@ class Window(gtk.Window):
             groupMatch = groupMatch[:-1]
             
             if groupMatch == '':
-                tstyles.append(TextStyle())
+                tstyles.append(GtkTextStyle())
             else:
-                tstyles.append(TextStyle.from_bash_code_values(int(x) for x in groupMatch.split(';')))
+                tstyles.append(GtkTextStyle.from_bash_code_values(int(x) for x in groupMatch.split(';')))
         
         parts = pattern.split(bash_code) # having groups, splitting contains the splitting part too at even indexes
         
@@ -1593,7 +1430,7 @@ class Window(gtk.Window):
                     self.stylingBox.set_styling(tstyle)
             ### ###
             
-            buffer.insert_with_tags(currentIter,parts[i+1],*TextStyle.to_gtk_tags(tstyle,tag_table))
+            buffer.insert_with_tags(currentIter,parts[i+1],*GtkTextStyle.to_gtk_tags(tstyle,tag_table))
         
         self.textview.handler_unblock(self.fpt_sel_changed_id)
         self.textview.handler_unblock(self.fpt_changed_id)
@@ -1661,7 +1498,7 @@ class Window(gtk.Window):
                 self.stylingBox.set_current_command(command)
             else:
                 self.stylingBox.deactivate_command()
-                tstyle = TextStyle.from_gtk_selection(start,end)
+                tstyle = GtkTextStyle.from_gtk_selection(start,end)
                 print 'selected. style is ',tstyle
                 self.stylingBox.set_styling(tstyle)
             
@@ -1700,9 +1537,9 @@ class Window(gtk.Window):
             nextIter = currentIter.copy()
             nextIter.forward_char()
             
-            tstyle = TextStyle.from_gtk_selection(currentIter,nextIter)
+            tstyle = GtkTextStyle.from_gtk_selection(currentIter,nextIter)
             
-            bash_code = TextStyle.to_bash_code(tstyle)
+            bash_code = GtkTextStyle.to_bash_code(tstyle)
             
             if bash_code == '': bash_code = r'\e[0m'
             

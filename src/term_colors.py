@@ -361,6 +361,240 @@ class ANSIColor(BashColor):
         return BASH_ANSI_COLORS
 
 
+class TextStyle(object):
+    INCONSISTENT = -1
+    
+    WEIGHT_NORMAL = 'normal'
+    WEIGHT_BOLD = 'bold'
+    WEIGHT_FAINT = 'faint'
+    
+    WEIGHT = 'weight'
+    STRIKETHROUGH = 'strikethrough'
+    UNDERLINE = 'underline'
+    INVERT = 'invert'
+    
+    BACKGROUND = 'background'
+    FOREGROUND = 'foreground'
+    
+    def __init__(self):
+        self._weight = TextStyle.WEIGHT_NORMAL
+        self._invert = False
+        self._underline = False
+        self._strikethrough = False
+        self._background = None
+        self._foreground = None
+    
+    @property
+    def background(self):
+        # check for True to include INCONSINSTENT too
+        return self._background if not self._invert==True else self._foreground
+    
+    @background.setter
+    def background(self,value):
+        if value != None and value != TextStyle.INCONSISTENT and not isinstance(value,BashColor):
+            raise TypeError("Not a valid background")
+        
+        if self._invert==True: # check for True to include INCONSINSTENT too
+            self._foreground = value
+        else:
+            self._background = value
+    
+    @property
+    def foreground(self):
+        # check for True to include INCONSINSTENT too
+        return self._foreground if not self._invert==True else self._background
+    
+    @foreground.setter
+    def foreground(self,value):
+        if value != None and value != TextStyle.INCONSISTENT and not isinstance(value,BashColor):
+            raise TypeError("Not a valid foreground")
+        
+        if self._invert==True: # check for True to include INCONSINSTENT too
+            self._background = value
+        else:
+            self._foreground = value
+    
+    @property
+    def underline(self):
+        return self._underline
+    
+    @underline.setter
+    def underline(self,value):
+        self._underline = TextStyle._getBoolOrInconsistent(value)
+    
+    @property
+    def strikethrough(self):
+        return self._strikethrough
+    
+    @strikethrough.setter
+    def strikethrough(self,value):
+        self._strikethrough = TextStyle._getBoolOrInconsistent(value)
+    
+    @property
+    def invert(self):
+        return self._invert
+    
+    @invert.setter
+    def invert(self,value):
+        invert = TextStyle._getBoolOrInconsistent(value)
+        if invert!=self._invert and invert!=TextStyle.INCONSISTENT:
+            self._background,self._foreground = self._foreground, self._background
+        
+        self._invert = invert
+    
+    @property
+    def weight(self):
+        return self._weight
+    
+    @weight.setter
+    def weight(self,value):
+        if value not in (None,
+                         TextStyle.INCONSISTENT,
+                         TextStyle.WEIGHT_NORMAL,
+                         TextStyle.WEIGHT_BOLD,
+                         TextStyle.WEIGHT_FAINT):
+            raise TypeError("Not a valid weight")
+        
+        self._weight = value
+        
+    def __str__(self):
+        return self.__unicode__().encode('utf-8')
+    
+    def __unicode__(self):
+        map = {}
+        if self.background:
+            if self.is_inconsistent('background'):
+                map['background'] = TextStyle.INCONSISTENT
+            else:
+                map['background'] = self.background.hexcolor
+        
+        if self.foreground:
+            if self.is_inconsistent('foreground'):
+                map['foreground'] = TextStyle.INCONSISTENT
+            else:
+                map['foreground'] = self.foreground.hexcolor
+        
+        for attrName in ('underline','strikethrough','weight','invert'):
+            if getattr(self,attrName):
+                map[attrName] = getattr(self,attrName)
+        
+        return u'<'+self.__class__.__name__+' '+u' '.join(('%s="%s"' % (key,value)) for key,value in map.iteritems())+u'>'
+    
+    def __repr__(self):
+        return str(self)
+    
+    def calculate_background(self):
+        return self._foreground if self.invert else self._background
+    
+    def calculate_foreground(self):
+        return self._background if self.invert else self._foreground
+    
+    def set_inconsistent(self,attrName):
+        setattr(self,attrName,TextStyle.INCONSISTENT)
+    
+    def is_inconsistent(self,attrName):
+        return getattr(self,attrName) == TextStyle.INCONSISTENT
+    
+    def is_set(self,attrName):
+        return attrName and not self.is_inconsistent(attrName)
+    
+    @staticmethod
+    def _getBoolOrInconsistent(value):
+        return TextStyle.INCONSISTENT if TextStyle.INCONSISTENT==value else bool(value)
+    
+    @staticmethod
+    def _merge_styles_attr(st1,st2,attrName,fill_empty_properties):
+        attr1 = getattr(st1,attrName)
+        attr2 = getattr(st2,attrName)
+        
+        if attr1 == attr2:
+            return attr1
+        
+        # with fill_empty_properties if a properties is set and the
+        # other unset it doesn't become INCONSISTENT
+        if fill_empty_properties and not (attr1 and attr2):
+            return attr1 or attr2
+        else:
+            return TextStyle.INCONSISTENT
+    
+    @classmethod
+    def merge_styles(cls,text_styles,fill_empty_properties=False):
+        if not len(text_styles): return cls()
+        
+        tstyle = text_styles[0]
+        
+        for ts in text_styles[1:]:
+            
+            for attrName in ('_underline','_strikethrough','_background','_foreground','_weight'):
+                
+                setattr(tstyle,attrName,
+                        TextStyle._merge_styles_attr(tstyle,ts,attrName,fill_empty_properties))
+            
+            if ts.invert and not tstyle.is_inconsistent('invert'):
+                tstyle.invert = True
+        
+        return tstyle
+    
+    @staticmethod
+    def to_bash_code(tstyle):
+        
+        codes = []
+        
+        if tstyle.weight and not tstyle.is_inconsistent('weight'):
+            codes.append({
+                TextStyle.WEIGHT_NORMAL : 0,
+                TextStyle.WEIGHT_BOLD : 1,
+                TextStyle.WEIGHT_FAINT : 2
+                }[tstyle.weight]
+            )
+        
+        if tstyle.underline and not tstyle.is_inconsistent('underline'):
+            codes.append(4)
+        
+        if tstyle.strikethrough and not tstyle.is_inconsistent('strikethrough'):
+            codes.append(9)
+        
+        if tstyle.invert and not tstyle.is_inconsistent('invert'):
+            codes.append(7)
+        
+        if tstyle.background and not tstyle.is_inconsistent('background'):
+            codes.append(tstyle.background.getEscapeCode(isBackground=True))
+        
+        if tstyle.foreground and not tstyle.is_inconsistent('foreground'):
+            codes.append(tstyle.foreground.getEscapeCode())
+        
+        if len(codes):
+            return r'\e[%sm' % ';'.join(str(x) for x in codes)
+        else:
+            return ''
+    
+    @staticmethod
+    def from_bash_code_values(values):
+        tstyle = TextStyle()
+        
+        for val in values:
+            
+            if val == 0:
+                tstyle.weight = TextStyle.WEIGHT_NORMAL
+            elif val == 1:
+                tstyle.weight = TextStyle.WEIGHT_BOLD
+            elif val == 2:
+                tstyle.weight = TextStyle.WEIGHT_FAINT
+            elif val == 4:
+                tstyle.underline = True
+            elif val == 7:
+                tstyle.invert = True
+            elif val == 9:
+                tstyle.strikethrough = True
+            elif 30 <= val <= 37:
+                tstyle.foreground = ANSI_COLORS[val-30]
+            elif 40 <= val <= 47:
+                tstyle.background = ANSI_COLORS[val-40+8]
+            
+            # XXX TODO doesn't work with 256 colors (usually are something like 38;5;colorCode)
+        
+        return tstyle
+
 TERM_COLORS = [BashColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_term_colors)]
 ANSI_COLORS = [ANSIColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_ansi_colors)]
 GRAYSCALE = [BashColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_grayscale)]
