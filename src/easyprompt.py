@@ -235,43 +235,52 @@ class GtkTextStyle(TextStyle):
         
         return tag
     
+    
     @staticmethod
     def to_gtk_tags(tstyle,tag_table):
         
         tags=[]
         
-        for attrName in ('underline','strikethrough','background','foreground'):
+        for attrName in (GtkTextStyle.BACKGROUND,GtkTextStyle.FOREGROUND):
+            
+            color = getattr(tstyle,attrName)
+            
+            if not color or tstyle.is_inconsistent(attrName):
+                continue
+            
+            attrTag = 'background' if attrName==GtkTextStyle.BACKGROUND else 'foreground'
+            if tstyle.invert==True: # True to check for inconsistencies too
+                attrTag = 'foreground' if attrTag=='background' else 'background'
+            
+            tag = tag_table.lookup(get_color_tag_name(color,tstyle.weight,attrTag=='background'))
+            
+            tags.append(tag)
+            setattr(tag,'_%sColor' % attrTag, color)
+        
+        for attrName in (GtkTextStyle.UNDERLINE,GtkTextStyle.STRIKETHROUGH):
             
             value = getattr(tstyle,attrName)
             
-            if value and not value == GtkTextStyle.INCONSISTENT:
-                
-                if attrName in ('background','foreground'):
-                    fakeAttrName = attrName
-                    color = value
-                    
-                    if tstyle.invert and not tstyle.is_inconsistent('invert'):
-                        fakeAttrName = 'background' if attrName == 'foreground' else 'foreground'
-                    
-                    tag = tag_table.lookup(get_color_tag_name(color,tstyle.weight,fakeAttrName=='background'))
-                    
-                    tags.append(tag)
-                    setattr(tag,'_'+fakeAttrName+'Color',color)
-                    
-                else:
-                    tag = tag_table.lookup(attrName)
-                    tag.set_property(attrName,value)
-                    tags.append(tag)
+            if not value or tstyle.is_inconsistent(attrName):
+                continue
+            
+            tag = tag_table.lookup(attrName)
+            tag.set_property(attrName,value)
+            tags.append(tag)
         
         if not tstyle.is_inconsistent('weight'):
-            value = tstyle.weight
+            weight = tstyle.weight
+            tagName = None
             
-            if value == GtkTextStyle.WEIGHT_FAINT:
-                tags.append(tag_table.lookup('weight_faint'))
-            elif value == GtkTextStyle.WEIGHT_BOLD:
-                tags.append(tag_table.lookup('weight_bold'))
-            elif value == GtkTextStyle.WEIGHT_NORMAL:
-                tags.append(tag_table.lookup('weight_normal'))
+            if weight == GtkTextStyle.WEIGHT_FAINT:
+                tagName = 'weight_faint'
+            elif weight == GtkTextStyle.WEIGHT_BOLD:
+                tagName = 'weight_bold'
+            elif weight == GtkTextStyle.WEIGHT_NORMAL:
+                tagName = 'weight_normal'
+            
+            if tagName:
+                tags.append(tag_table.lookup(tagName))
         
         if tstyle.invert and not tstyle.is_inconsistent('invert'):
             tags.append(tag_table.lookup('invert'))
