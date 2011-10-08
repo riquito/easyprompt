@@ -16,7 +16,7 @@ from math import floor,ceil
 
 import shell
 from term_colors import (BashColor,ANSIColor,TERM_COLORS,ANSI_COLORS,GRAYSCALE,
-                         lighter_rgb,darker_rgb,rgb2hex,TextStyle)
+                         lighter_rgb,darker_rgb,rgb2hex,TextStyle,parse_bash_code)
 from i18n import _
 
 COLORS = ANSI_COLORS
@@ -1396,44 +1396,24 @@ class Window(gtk.Window):
         
         buffer.set_text('')
         
-        bash_code  = re.sub(r'(\\\[|\\\])','',bash_code) # strip \[ and \]
+        parts = parse_bash_code(bash_code,COMMANDS,GtkTextStyle)
         
-        ### this is incredibly inefficient ###
-        for command in COMMANDS:
-            bash_code = bash_code.replace(command.toBash(),command.keyword)
-        ### ###
-        
-        pattern = re.compile(r'(?:\\033|\\e)\[((?:\d*[;m])*)')
-        
-        tstyles = []
-        for groupMatch in pattern.findall(bash_code):
-            
-            groupMatch = groupMatch[:-1]
-            
-            if groupMatch == '':
-                tstyles.append(GtkTextStyle())
-            else:
-                tstyles.append(GtkTextStyle.from_bash_code_values(int(x) for x in groupMatch.split(';')))
-        
-        parts = pattern.split(bash_code) # having groups, splitting contains the splitting part too at even indexes
-        
-        buffer.insert(buffer.get_end_iter(),parts[0])
-        for i in range(1,len(parts)-1,2):
+        for tstyle,text in parts:
             currentIter = buffer.get_end_iter()
-            tstyle = tstyles[(i-1)/2]
             
-            ### again, really inefficient
+            ### really inefficient
             for command in COMMANDS:
-                if command.keyword in parts[i+1]:
+                if command.keyword in text:
                     self.stylingBox.set_current_command(command)
                     self.stylingBox.activate_command()
                     self.stylingBox.set_styling(tstyle)
             ### ###
             
-            buffer.insert_with_tags(currentIter,parts[i+1],*GtkTextStyle.to_gtk_tags(tstyle,tag_table))
+            buffer.insert_with_tags(currentIter,text,*GtkTextStyle.to_gtk_tags(tstyle,tag_table))
         
         self.textview.handler_unblock(self.fpt_sel_changed_id)
         self.textview.handler_unblock(self.fpt_changed_id)
+        self.textview.emit('changed')
     
     def on_importBtn_clicked(self,btn):
         

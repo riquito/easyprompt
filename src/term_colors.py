@@ -1,4 +1,6 @@
 
+import re
+
 _hex_term_colors = [
     
     "#000000",   # 0 black
@@ -568,33 +570,73 @@ class TextStyle(object):
         else:
             return ''
     
-    @staticmethod
-    def from_bash_code_values(values):
-        tstyle = TextStyle()
-        
-        for val in values:
-            
-            if val == 0:
-                tstyle.weight = TextStyle.WEIGHT_NORMAL
-            elif val == 1:
-                tstyle.weight = TextStyle.WEIGHT_BOLD
-            elif val == 2:
-                tstyle.weight = TextStyle.WEIGHT_FAINT
-            elif val == 4:
-                tstyle.underline = True
-            elif val == 7:
-                tstyle.invert = True
-            elif val == 9:
-                tstyle.strikethrough = True
-            elif 30 <= val <= 37:
-                tstyle.foreground = ANSI_COLORS[val-30]
-            elif 40 <= val <= 47:
-                tstyle.background = ANSI_COLORS[val-40+8]
-            
-            # XXX TODO doesn't work with 256 colors (usually are something like 38;5;colorCode)
-        
-        return tstyle
+    
 
 TERM_COLORS = [BashColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_term_colors)]
 ANSI_COLORS = [ANSIColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_ansi_colors)]
 GRAYSCALE = [BashColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_grayscale)]
+
+def parse_bash_code(bash_code,commands=None,styleClass=TextStyle):
+    
+    # XXX temporary clumsy fix for terminal with title set
+    bash_code = re.sub(r'\\\[\\\e]0;.*?\\\]','',bash_code)
+    
+    bash_code  = re.sub(r'(\\\[|\\\])','',bash_code) # strip \[ and \]
+    
+    if commands==None:
+        commands = []
+    
+    ### this is incredibly inefficient ###
+    for command in commands:
+        bash_code = bash_code.replace(command.toBash(),command.keyword)
+    ### ###
+    
+    pattern = re.compile(r'(?:\\033|\\e)\[((?:\d*[;m])*)')
+    
+    tstyles = []
+    for groupMatch in pattern.findall(bash_code):
+        
+        groupMatch = groupMatch[:-1]
+        
+        if groupMatch == '':
+            tstyles.append(styleClass())
+        else:
+            tstyles.append(__from_bash_code_values((int(x) for x in groupMatch.split(';')),styleClass))
+    
+    parts = pattern.split(bash_code) # having groups, splitting contains the splitting part too at even indexes
+    
+    if not parts:
+        return []
+    
+    res = []
+    for i in range(1,len(parts)-1,2):
+        tstyle = tstyles[(i-1)/2]
+        res.append((tstyle,parts[i+1]))
+    
+    return [(styleClass(),parts[0])] + res
+
+def __from_bash_code_values(values,styleClass):
+    tstyle = styleClass()
+
+    for val in values:
+        
+        if val == 0:
+            tstyle.weight = TextStyle.WEIGHT_NORMAL
+        elif val == 1:
+            tstyle.weight = TextStyle.WEIGHT_BOLD
+        elif val == 2:
+            tstyle.weight = TextStyle.WEIGHT_FAINT
+        elif val == 4:
+            tstyle.underline = True
+        elif val == 7:
+            tstyle.invert = True
+        elif val == 9:
+            tstyle.strikethrough = True
+        elif 30 <= val <= 37:
+            tstyle.foreground = ANSI_COLORS[val-30]
+        elif 40 <= val <= 47:
+            tstyle.background = ANSI_COLORS[val-40+8]
+        
+        # XXX TODO doesn't work with 256 colors (usually are something like 38;5;colorCode)
+    
+    return tstyle
