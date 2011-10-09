@@ -862,14 +862,13 @@ class FormatPromptTextView(gtk.TextView):
         table.add(tag)
         
         def on_delete_range(buffer,startIter,endIter):
-            
             res = self.get_command_at_iter(startIter)
             if res:
                 buffer.handler_block(self.id_delete_range)
                 buffer.delete(res['start'],res['end'])
                 buffer.handler_unblock(self.id_delete_range)
-            
-            buffer.emit_stop_by_name('delete-range')
+                
+                buffer.emit_stop_by_name('delete-range')
             
         self.id_delete_range = self.buffer.connect('delete-range',on_delete_range);
         
