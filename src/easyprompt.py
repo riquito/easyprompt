@@ -227,7 +227,7 @@ class GtkTextStyle(TextStyle):
                 pangoProp = pango.WEIGHT_ULTRALIGHT
             elif weight == GtkTextStyle.WEIGHT_BOLD:
                 pangoProp = pango.WEIGHT_BOLD
-            else:
+            elif weight == GtkTextStyle.WEIGHT_NORMAL:
                 pangoProp = pango.WEIGHT_NORMAL
             
             tag.set_property('weight',pangoProp)
@@ -252,8 +252,9 @@ class GtkTextStyle(TextStyle):
             if tstyle.invert==True: # True to check for inconsistencies too
                 attrTag = 'foreground' if attrTag=='background' else 'background'
             
-            tag = tag_table.lookup(get_color_tag_name(color,tstyle.weight,attrTag=='background'))
+            weight = tstyle.weight if not tstyle.is_inconsistent('weight') else GtkTextStyle.WEIGHT_NORMAL
             
+            tag = tag_table.lookup(get_color_tag_name(color,weight,attrTag=='background'))
             tags.append(tag)
             setattr(tag,'_%sColor' % attrTag, color)
         
@@ -319,7 +320,7 @@ class GtkTextStyle(TextStyle):
                 tstyle.weight = GtkTextStyle.WEIGHT_BOLD
             elif pangoWeight == pango.WEIGHT_ULTRALIGHT:
                 tstyle.weight = GtkTextStyle.WEIGHT_FAINT
-            else:
+            elif pangoWeight == pango.WEIGHT_NORMAL:
                 tstyle.weight = GtkTextStyle.WEIGHT_NORMAL
         
         return tstyle
@@ -1421,6 +1422,7 @@ class Window(gtk.Window):
         
         self.textview.handler_unblock(self.fpt_sel_changed_id)
         self.textview.handler_unblock(self.fpt_changed_id)
+        
         self.textview.emit('changed')
     
     def on_importBtn_clicked(self,btn):

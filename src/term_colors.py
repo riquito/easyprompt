@@ -379,7 +379,7 @@ class TextStyle(object):
     FOREGROUND = 'foreground'
     
     def __init__(self):
-        self._weight = TextStyle.WEIGHT_NORMAL
+        self._weight = None
         self._invert = False
         self._underline = False
         self._strikethrough = False
@@ -561,9 +561,13 @@ class TextStyle(object):
         
         if tstyle.background and not tstyle.is_inconsistent('background'):
             codes.append(tstyle.background.getEscapeCode(isBackground=True))
+        elif tstyle.background==None:
+            codes.append(49)
         
         if tstyle.foreground and not tstyle.is_inconsistent('foreground'):
             codes.append(tstyle.foreground.getEscapeCode())
+        elif tstyle.foreground==None:
+            codes.append(39)
         
         if len(codes):
             return r'\e[%sm' % ';'.join(str(x) for x in codes)
