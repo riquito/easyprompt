@@ -310,7 +310,9 @@ class BashColor:
         styleCode = ''
         
         if isBackground:
-            styleCode = '7;'
+            styleCode = '48;5;'
+        else:
+            styleCode = '38;5;'
         
         return '%s%d' % (styleCode,colorCode)
     
@@ -318,7 +320,7 @@ class BashColor:
         return self.__unicode__().encode('utf-8')
     
     def __unicode__(self):
-        return u'<%s %s idx(%d)>' % (self.__class__,self.hexcolor,self.index)
+        return u'%s-idx(%d)' % (self.hexcolor,self.index)
     
     def __eq__(self,obj):
         if isinstance(obj,BashColor):
@@ -330,7 +332,7 @@ class BashColor:
         return hash('%s idx(%d)' % (self.hexcolor,self.index))
     
     def __repr__(self):
-        return str(self)
+        return '<%s %s>' % (self.__class__.__name__,str(self))
     
     @staticmethod
     def getAllColors():
@@ -574,7 +576,6 @@ class TextStyle(object):
         else:
             return ''
     
-    
 
 TERM_COLORS = [BashColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_term_colors)]
 ANSI_COLORS = [ANSIColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_ansi_colors)]
@@ -621,7 +622,30 @@ def parse_bash_code(bash_code,commands=None,styleClass=TextStyle):
 
 def __from_bash_code_values(values,styleClass):
     tstyle = styleClass()
-
+    
+    values = list(values)
+    
+    def get_highcolor(values,isBackground):
+        colIndex = None
+        startVal = 48 if isBackground else 38
+        try:
+            highColorsIdx = values.index(startVal)
+            if values[highColorsIdx+1] == 5:
+                colIndex = values[highColorsIdx+2]
+                values = vales[:highColorsIdx]+values[highColorsIdx+3:]
+        except (ValueError,IndexError) as e:
+            pass
+        
+        return [values,colIndex]
+    
+    values,fgIndex = get_highcolor(values,False)
+    if fgIndex != None:
+        tstyle.foreground = TERM_COLORS[fgIndex]
+    
+    values,bgIndex = get_highcolor(values,False)
+    if bgIndex != None:
+        tstyle.background = TERM_COLORS[bgIndex]
+    
     for val in values:
         
         if val == 0:
@@ -641,6 +665,5 @@ def __from_bash_code_values(values,styleClass):
         elif 40 <= val <= 47:
             tstyle.background = ANSI_COLORS[val-40+8]
         
-        # XXX TODO doesn't work with 256 colors (usually are something like 38;5;colorCode)
     
     return tstyle

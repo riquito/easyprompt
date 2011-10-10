@@ -256,6 +256,7 @@ class GtkTextStyle(TextStyle):
             
             tag = tag_table.lookup(get_color_tag_name(color,weight,attrTag=='background'))
             tags.append(tag)
+            
             setattr(tag,'_%sColor' % attrTag, color)
         
         for attrName in (GtkTextStyle.UNDERLINE,GtkTextStyle.STRIKETHROUGH):
@@ -1254,8 +1255,7 @@ class Window(gtk.Window):
         self.set_border_width(5)
         self.connect('delete-event',self.on_delete_event)
         
-        #self.colors = TERM_COLORS
-        self.colors = ANSI_COLORS
+        self.colors = COLORS
         
         vbox=gtk.VBox()
         
