@@ -579,7 +579,12 @@ class TextStyle(object):
 
 TERM_COLORS = [BashColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_term_colors)]
 ANSI_COLORS = [ANSIColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_ansi_colors)]
-GRAYSCALE = [BashColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_grayscale)]
+
+BLACK = TERM_COLORS[0]
+WHITE = TERM_COLORS[15]
+
+GRAYSCALE = [BLACK]+[BashColor(hexcolor,idx) for idx,hexcolor in enumerate(_hex_grayscale)]+[WHITE]
+
 
 def parse_bash_code(bash_code,commands=None,styleClass=TextStyle):
     
