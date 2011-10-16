@@ -177,17 +177,17 @@ class ColorWidget(gtk.DrawingArea):
                       (gobject.TYPE_PYOBJECT,gobject.TYPE_PYOBJECT,gobject.TYPE_PYOBJECT)
                     ),
         'color-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                            (gobject.TYPE_PYOBJECT,gobject.TYPE_PYOBJECT)),
+                            (gobject.TYPE_PYOBJECT,gobject.TYPE_PYOBJECT))
     }
     
     def __init__(self,rgb,data=None,width=None,height=None):
         super(self.__class__,self).__init__()
-        self.set_events(gtk.gdk.BUTTON_PRESS_MASK)
+        self.set_events(gtk.gdk.BUTTON_PRESS_MASK|gtk.gdk.POINTER_MOTION_MASK|gtk.gdk.LEAVE_NOTIFY_MASK|gtk.gdk.ENTER_NOTIFY_MASK)
         
         self.set_size_request(width or self.default_width,height or self.default_height)
         self.set_color(rgb,data)
         
-        self.connect("button_press_event", self.on_button_press)
+        self.connect("button-press-event", self.on_button_press)
     
     def on_button_press(self,widget,ev):
         self.emit('clicked',ev,self.rgb,self.data)
@@ -277,6 +277,17 @@ class ColorPicker(gtk.Fixed):
         
         hbox = gtk.HBox()
         
+        self.noColor = ColorWidget(None,_options['previewer_width'],_options['previewer_height'])
+        self.noColor.show()
+        
+        halign = gtk.Alignment(0, 0, 0, 0)
+        halign.add(self.noColor)
+        halign.show()
+        
+        hbox.pack_start(halign)
+        
+        pBox = gtk.HBox()
+        
         self.fgColor = ColorWidget(None,_options['previewer_width'],_options['previewer_height'])
         self.bgColor = ColorWidget(None,_options['previewer_width'],_options['previewer_height'])
         
@@ -289,15 +300,18 @@ class ColorPicker(gtk.Fixed):
             }
         }
         
-        hbox.pack_start(self.fgColor)
-        hbox.pack_start(self.bgColor)
-        hbox.show_all()
+        pBox.pack_start(self.fgColor)
+        pBox.pack_start(self.bgColor)
+        pBox.show_all()
         
         halign = gtk.Alignment(1, 0, 0, 0)
         halign.show()
-        halign.add(hbox)
+        halign.add(pBox)
         
-        vbox.pack_start(halign,False,False,0)
+        hbox.pack_start(halign)
+        
+        hbox.show()
+        vbox.pack_start(hbox,False,False,0)
         
         vbox.show()
         self.add(vbox)
@@ -322,12 +336,15 @@ class ColorPicker(gtk.Fixed):
                 # will be modified internally)
                 return
             
-            if w_ev.window != self.palette.window and w_ev.window != (self.grayscalePalette and self.grayscalePalette.window):
+            if w_ev.window not in (self.palette.window,(self.grayscalePalette and self.grayscalePalette.window),self.noColor.window):
                 # clicked outside of the palette, restore original color
                 colorWidget.set_color(*self._prevColor)
             
             self.palette.disconnect(self._mouseOverPalette_id)
             self.palette.disconnect(self.palette_leave_id)
+            
+            self.noColor.disconnect(self._mouseOverNoColor_id)
+            self.noColor.disconnect(self.noColor_leave_id)
             
             if self.grayscalePalette:
                 self.grayscalePalette.disconnect(self._mouseOverGrayscale_id)
@@ -347,13 +364,15 @@ class ColorPicker(gtk.Fixed):
             widget.disconnect(self._previewersSignals[widget]['clicked_id'])
         
         self._mouseOverPalette_id = self.palette.connect('mouse-over',self.on_mouseOver_palette,colorWidget)
+        self._mouseOverNoColor_id = self.noColor.connect('enter-notify-event',lambda *x: colorWidget.set_color(None,None))
+        
         if self.grayscalePalette:
             self._mouseOverGrayscale_id = self.grayscalePalette.connect('mouse-over',self.on_mouseOver_palette,colorWidget)
         
-        self.palette_leave_id = self.palette.connect('leave_notify_event',lambda *x: colorWidget.set_color(*self._prevColor))
+        self.palette_leave_id = self.palette.connect('leave-notify-event',lambda *x: colorWidget.set_color(*self._prevColor))
+        self.noColor_leave_id = self.noColor.connect('leave-notify-event',lambda *x: colorWidget.set_color(*self._prevColor))
         if self.grayscalePalette:
-                self.grayscalePalette_leave_id = self.grayscalePalette.connect('leave_notify_event',lambda *x: colorWidget.set_color(*self._prevColor))
-        
+            self.grayscalePalette_leave_id = self.grayscalePalette.connect('leave-notify-event',lambda *x: colorWidget.set_color(*self._prevColor))
         
         gtkWindow.window.set_events(gtkWindow.window.get_events()|gtk.gdk.BUTTON_PRESS_MASK)
         gtk.gdk.event_handler_set(on_click_anywhere)
