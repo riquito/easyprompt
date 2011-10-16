@@ -277,7 +277,7 @@ class ColorPicker(gtk.Fixed):
         
         hbox = gtk.HBox()
         
-        self.noColor = ColorWidget(None,_options['previewer_width'],_options['previewer_height'])
+        self.noColor = ColorWidget(None,width=_options['cells_width'],height=_options['cells_height'])
         self.noColor.show()
         
         halign = gtk.Alignment(0, 0, 0, 0)
@@ -288,8 +288,8 @@ class ColorPicker(gtk.Fixed):
         
         pBox = gtk.HBox()
         
-        self.fgColor = ColorWidget(None,_options['previewer_width'],_options['previewer_height'])
-        self.bgColor = ColorWidget(None,_options['previewer_width'],_options['previewer_height'])
+        self.fgColor = ColorWidget(None,width=_options['previewer_width'],height=_options['previewer_height'])
+        self.bgColor = ColorWidget(None,width=_options['previewer_width'],height=_options['previewer_height'])
         
         self._previewersSignals = {
             self.fgColor : {
