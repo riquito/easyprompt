@@ -15,8 +15,10 @@ import gtk,pango,gobject
 from math import floor,ceil
 
 import shell
-from term_colors import (BashColor,ANSIColor,TERM_COLORS,ANSI_COLORS,GRAYSCALE,
+from term_colors import (BashColor,ANSIColor,TERM_COLORS,ANSI_COLORS,GRAYSCALE,WHITE,
                          lighter_rgb,darker_rgb,rgb2hex,TextStyle,parse_bash_code)
+from colorPicker import ColorPicker,ColorWidget
+
 from i18n import _
 
 COLORS = ANSI_COLORS
@@ -197,7 +199,12 @@ class GtkTextStyle(TextStyle):
                 if attrTag == 'foreground':
                     
                     if tstyle.weight == GtkTextStyle.WEIGHT_BOLD:
-                        rgb = lighter_rgb(color.rgb)
+                        
+                        if color.index<8:
+                            rgb = COLORS[color.index+8].rgb
+                        else:
+                            rgb = lighter_rgb(color.rgb)
+                        
                     elif tstyle.weight == GtkTextStyle.WEIGHT_FAINT:
                         rgb = darker_rgb(color.rgb)
                     else: # normal or inconsistent
@@ -352,7 +359,124 @@ class GtkTextStyle(TextStyle):
             tstyle.background, tstyle.foreground = tstyle.foreground, tstyle.background
         print 'from gtk selection',tstyle
         return tstyle
+
+class BashColorPicker(ColorPicker):
+    def __init__(self,bash_colors):
+        
+        if bash_colors == ANSI_COLORS:
+            num_columns = 8
+            colors = [x.rgb for x in bash_colors[:num_columns]]
+            grayscaleColors = None
+            reorder = False
+        else:
+            num_columns = len(GRAYSCALE)
+            # visible colors are all but grayscale colors (not counting white and black)
+            colors = [x.rgb for x in bash_colors[:-(len(GRAYSCALE)-2)]]
+            grayscaleColors = [x.rgb for x in GRAYSCALE]
+            reorder = True
+        
+        self.bash_colors = bash_colors
+        
+        super(BashColorPicker,self).__init__(colors,grayscaleColors,{
+            'num_columns':num_columns,
+            'cells_width':20,
+            'cells_height':20,
+            'previewer_width':20,
+            'previewer_height':20,
+            'reorder':reorder
+        })
+        
+        self._brightness = None
     
+    def _get_rgb_for_brightness(self,rgb,idx,colorWidget):
+        if colorWidget==self.fgColor and idx!=None and idx<8:
+            if self._brightness:
+                return TERM_COLORS[idx+8].rgb
+            else:
+                return TERM_COLORS[idx].rgb
+        else:
+            return rgb
+    
+    def on_mouseOver_palette(self,palette,ev,rgb,paletteIndex,colorWidget):
+        if palette == self.grayscalePalette:
+            index = GRAYSCALE[paletteIndex].index
+        else:
+            if paletteIndex >= len(self.bash_colors):
+                index = WHITE.index
+                rgb = WHITE.rgb
+            else:
+                index = paletteIndex
+        
+        colorWidget.set_color(self._get_rgb_for_brightness(rgb,index,colorWidget),index)
+    
+    def _get_bashColor(self,background=True):
+        col_data = getattr(self,'get_%s' % ('background' if background else 'foreground'))()
+        if col_data['rgb'] == ColorWidget.UNKNOWN:
+            return GtkTextStyle.INCONSISTENT
+        elif col_data['data'] is None:
+            return None
+        else:
+            return COLORS[col_data['data']]
+    
+    def get_bashColor_background(self):
+        return self._get_bashColor(background=True)
+    
+    def get_bashColor_foreground(self):
+        return self._get_bashColor(background=False)
+    
+    def set_bg_fg(self,bgBashColor,fgBashColor):
+        
+        for bashColor,method in ((bgBashColor,'set_background'),(fgBashColor,'set_foreground')):
+            rgb,idx = ColorWidget.UNKNOWN,None
+            
+            if bashColor != GtkTextStyle.INCONSISTENT:
+                if bashColor is None:
+                    rgb = None
+                else:
+                    rgb = bashColor.rgb
+                    idx = bashColor.index
+            
+            if bashColor == fgBashColor and self._brightness:
+                rgb = self._get_rgb_for_brightness(rgb,idx,(self.fgColor if bashColor==fgBashColor else self.bgColor))
+            
+            getattr(super(self.__class__,self),method)(rgb,idx)
+    
+    def set_brightness(self,tstyle):
+        self._brightness = weight = tstyle.weight
+        
+        if weight == GtkTextStyle.WEIGHT_BOLD:
+            # the first 8 colors has always as bold counterpart the next 8 colors, whatever they are
+            if self.selecting_foreground:
+                func = lambda rgb,i: (i!=None and i<8) and tuple(x/255. for x in TERM_COLORS[i+8].rgb) or rgb
+            else:
+                func = None
+            self.palette.set_color_mask(func)
+            """
+            if self.grayscalePalette:
+                self.grayscalePalette.set_color_mask(lambda rgb,i: lighter_rgb(rgb))
+            """
+        else:
+            self.palette.set_color_mask()
+            if self.grayscalePalette:
+                self.grayscalePalette.set_color_mask()
+            
+            self._brightness = None
+        
+        for colorWidget in (self.bgColor,self.fgColor):
+            rgb,data = colorWidget.rgb,colorWidget.data
+            rgb = self._get_rgb_for_brightness(rgb,data,colorWidget)
+            colorWidget.set_color(rgb,data,emitSignal=False)
+        
+        """
+        elif weight == GtkTextStyle.WEIGHT_FAINT:
+            if self.bash_colors == ANSI_COLORS:
+                self.palette.set_color_mask(lambda rgb,i: i<8 and darker_rgb(rgb) or rgb)
+            
+            if self.grayscalePalette:
+                self.grayscalePalette.set_color_mask(lambda rgb,i: darker_rgb(rgb))
+            
+        """ 
+            
 
 class Styling(gtk.VBox):
     __gsignals__ = {
@@ -361,189 +485,6 @@ class Styling(gtk.VBox):
         'activate' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
                 (gobject.TYPE_PYOBJECT,)),
     }
-    
-    _memory={}
-    
-    class ColorsContainer(gtk.Frame):
-        __gsignals__ = {
-            'color-selected' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE, 
-                    (gobject.TYPE_PYOBJECT,)),
-        }
-        
-        class ColorPreview(gtk.DrawingArea):
-
-            # Draw in response to an expose-event
-            __gsignals__ = { "expose-event": "override" }
-            
-            def __init__(self,func_bright,bash_color=None):
-                super(Styling.ColorsContainer.ColorPreview,self).__init__()
-                
-                self.set_size_request(20,20)
-                self.color = bash_color
-                
-                if bash_color:
-                    self.draw=self._paint_color
-                else:
-                    self.draw=self._paint_transparent
-                
-                self.get_color_brightness = func_bright
-        
-            # Handle the expose-event by drawing
-            def do_expose_event(self, event):
-                # Create the cairo context
-                cr = self.window.cairo_create()
-        
-                # Restrict Cairo to the exposed area; avoid extra work
-                cr.rectangle(event.area.x, event.area.y,
-                        event.area.width, event.area.height)
-                cr.clip()
-        
-                self.draw(cr, *self.window.get_size())
-        
-            def _paint_transparent(self, cr, width, height):
-                # Fill the background with white
-                cr.set_source_rgb(1, 1, 1)
-                cr.rectangle(0, 0, width, height)
-                cr.fill()
-                
-                # a red line bottom left => top right
-                cr.set_source_rgb(1.0, 0.0, 0.0)
-                cr.move_to(0, height)
-                cr.line_to(width,0)
-                cr.stroke()
-            
-            def _paint_color(self, cr, width, height):
-                
-                br = self.get_color_brightness()
-                
-                if br == 'bright':
-                    r,g,b = lighter_rgb(self.color.rgb)
-                elif br =='dark':
-                    r,g,b = darker_rgb(self.color.rgb)
-                else:
-                    r,g,b = self.color.rgb
-                
-                cr.set_source_rgb(r/255.,g/255.,b/255.)
-                
-                cr.rectangle(0, 0, width, height)
-                cr.fill()
-        
-        def __init__(self,frameTitle,bash_colors,rows=1):
-            gobject.GObject.__init__(self)
-            
-            self.set_label(frameTitle)
-            self.set_border_width(1)
-            
-            self._can_emit_toggle = True
-            self.color_brightness = 'normal'
-            
-            bash_colors = [None]+bash_colors # None will mean 'transparent'
-            
-            numColors = len(bash_colors)
-            
-            columns=int(ceil(numColors/float(rows)))
-            
-            tableColors=gtk.Table(rows=rows,columns=columns,homogeneous=True)
-            tableColors.set_row_spacings(1)
-            tableColors.set_col_spacings(1)
-            
-            group=None
-            
-            self.currentColor = None
-            self.colors2radio={}
-            
-            def get_color_brigthness():
-                return self.color_brightness
-            
-            for row in range(rows):
-                for col in range(columns):
-                    
-                    singleColorBox=gtk.VBox()
-                    
-                    color = bash_colors[col]
-                    
-                    littleFrame = gtk.Frame()
-                    littleFrame.set_border_width(2)
-                    
-                    singleColorPreview = Styling.ColorsContainer.ColorPreview(get_color_brigthness,color)
-                    singleColorPreview.show()
-                    
-                    littleFrame.add(singleColorPreview)
-                    littleFrame.show()
-                    
-                    singleColorBox.pack_start(littleFrame,0,0,2)
-                    
-                    radioButton=gtk.RadioButton(group)
-                    if group == None: group = radioButton
-                    radioButton.show()
-                    
-                    align=gtk.Alignment(0.5, 0.5, 0, 0)
-                    align.add(radioButton)
-                    align.show()
-                    
-                    singleColorBox.pack_start(align,0,0,2)
-                    
-                    singleColorBox.show()
-                    
-                    self.colors2radio[color] = radioButton
-                    
-                    signal_id=radioButton.connect('toggled', self._on_color_selected,color)
-                    radioButton._signal_id=signal_id
-                    
-                    tableColors.attach(singleColorBox,col,col+1,row,row+1)
-            
-            self.invisibleRadioBtn = gtk.RadioButton(group)
-            singleColorBox.pack_start(self.invisibleRadioBtn,0,0,0)
-            
-            tableColors.show()
-            
-            self.add(tableColors)
-        
-        def _on_color_selected(self,widget,color):
-            if not widget.get_active() or not self._can_emit_toggle: return
-            
-            print '_on_color_selected()'
-            self.currentColor = color
-            self.emit('color-selected', self.currentColor)
-        
-        def set_color_brightness(self,brightness):
-            try:
-                brightness = {
-                    GtkTextStyle.WEIGHT_BOLD:'bright',
-                    GtkTextStyle.WEIGHT_FAINT:'dark',
-                    GtkTextStyle.WEIGHT_NORMAL:'normal',
-                    GtkTextStyle.INCONSISTENT:'normal'
-                }[brightness]
-                
-            except KeyError:
-                pass
-            
-            self.color_brightness = brightness
-            self.queue_draw()
-        
-        def get_color(self):
-            '''Return the color name or GtkTextStyle.INCONSISTENT'''
-            return self.currentColor
-        
-        def set_color(self,color=GtkTextStyle.INCONSISTENT):
-            print 'set_color',color
-            if color == GtkTextStyle.INCONSISTENT:
-                self.invisibleRadioBtn.set_active(True)
-                self.currentColor = GtkTextStyle.INCONSISTENT
-                return
-            
-            self.currentColor = color
-            
-            newRadioBtn = self.colors2radio[color]
-            
-            self._can_emit_toggle = False
-            
-            newRadioBtn.set_active(True)
-            
-            self._can_emit_toggle = True
-            
-    
-    gobject.type_register(ColorsContainer)
     
     class StylesContainer(gtk.Frame):
         __gsignals__ = {
@@ -679,16 +620,10 @@ class Styling(gtk.VBox):
         
         vbox = gtk.VBox()
         
-        self.frameBgColors=Styling.ColorsContainer(_('BACKGROUND_COLOR'),COLORS if COLORS==TERM_COLORS else ANSI_COLORS[:8])
-        self.frameBgColors.connect('color-selected', lambda *args: self._on_style_changed())
-        self.frameBgColors.show()
-        
-        self.frameFgColors=Styling.ColorsContainer(_('FOREGROUND_COLOR'),COLORS if COLORS==TERM_COLORS else ANSI_COLORS[:8])
-        self.frameFgColors.connect('color-selected', lambda *args: self._on_style_changed())
-        self.frameFgColors.show()
-        
-        vbox.pack_start(self.frameBgColors,0,0,2)
-        vbox.pack_start(self.frameFgColors,0,0,2)
+        self.picker = BashColorPicker(COLORS)
+        self.picker.bgColor.connect('color-changed', lambda *args: self._on_style_changed())
+        self.picker.fgColor.connect('color-changed', lambda *args: self._on_style_changed())
+        vbox.pack_start(self.picker,0,0,2)
         
         vbox.show()
         
@@ -711,10 +646,10 @@ class Styling(gtk.VBox):
     
     def _export_current_style(self):
         tstyle = self.frameStyles.get_styles()
-        print 'riq',tstyle
-        tstyle.background = self.frameBgColors.get_color()
-        tstyle.foreground = self.frameFgColors.get_color()
-        print 'riq2',tstyle
+        tstyle.background = self.picker.get_bashColor_background()
+        tstyle.foreground = self.picker.get_bashColor_foreground()
+        print tstyle.background,tstyle.foreground
+        
         return tstyle
     
     def _on_style_changed(self):
@@ -724,7 +659,7 @@ class Styling(gtk.VBox):
             self.gtkCommandsBox.get_active_command().tstyle = tstyle
         print '\nstyle changed',self.gtkCommandsBox.get_active_command().tstyle,"\n"
         
-        self.frameFgColors.set_color_brightness(tstyle.weight)
+        self.picker.set_brightness(tstyle)
         
         self.emit('changed')
     
@@ -733,8 +668,8 @@ class Styling(gtk.VBox):
     
     def set_styling(self,tstyle):
         print 'set styling',tstyle
-        self.frameBgColors.set_color(tstyle.background)
-        self.frameFgColors.set_color(tstyle.foreground)
+        self.picker.set_bg_fg(tstyle.background,tstyle.foreground)
+        
         self.frameStyles.set_styles(tstyle)
         print 'just set',self._export_current_style()
         self._on_style_changed()
@@ -745,8 +680,7 @@ class Styling(gtk.VBox):
     def _on_command_changed(self,keywordBox,command):
         print 'command changed',command,command.tstyle
         tstyle = command.tstyle
-        self.frameBgColors.set_color(tstyle.background)
-        self.frameFgColors.set_color(tstyle.foreground)
+        self.picker.set_bg_fg(tstyle.background,tstyle.foreground)
         self.frameStyles.set_styles(tstyle)
     
     def set_current_command(self,command):
@@ -772,8 +706,7 @@ class Styling(gtk.VBox):
         tstyle.set_inconsistent('background')
         tstyle.set_inconsistent('foreground')
         
-        self.frameBgColors.set_color(tstyle.background)
-        self.frameFgColors.set_color(tstyle.foreground)
+        self.picker.set_bg_fg(tstyle.background,tstyle.foreground)
         self.frameStyles.set_styles(tstyle)
         
         if keepOnlyColors:
@@ -819,7 +752,10 @@ class FormatPromptTextView(gtk.TextView):
                 ):
                 
                 if weight == GtkTextStyle.WEIGHT_BOLD:
-                    rgb = lighter_rgb(color.rgb)
+                    if color.index<8:
+                        rgb = COLORS[color.index+8].rgb
+                    else:
+                        rgb = lighter_rgb(color.rgb)
                 elif weight ==GtkTextStyle.WEIGHT_FAINT:
                     rgb = darker_rgb(color.rgb)
                 else:
@@ -1251,7 +1187,7 @@ class Window(gtk.Window):
     def __init__(self):
         gtk.Window.__init__(self)
         self.set_position(gtk.WIN_POS_CENTER)
-        self.set_size_request(700,700)
+        self.set_size_request(770,700)
         self.set_border_width(5)
         self.connect('delete-event',self.on_delete_event)
         

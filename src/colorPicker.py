@@ -234,12 +234,14 @@ class ColorWidget(gtk.DrawingArea):
             cr.set_source_rgb(0,0,0)
             cr.show_text('?')
     
-    def set_color(self,rgb,data=None):
+    def set_color(self,rgb,data=None,emitSignal=True):
         self.rgb = rgb
         self.data = data
-        
-        self.emit('color-changed',rgb,self.data)
         self.queue_draw()
+        
+        if emitSignal:
+            self.emit('color-changed',rgb,self.data)
+        
 
 
 class ColorPicker(gtk.Fixed):
@@ -316,6 +318,8 @@ class ColorPicker(gtk.Fixed):
         vbox.show()
         self.add(vbox)
         
+        self.selecting_foreground = True
+        
         self.show()
     
     def on_previewer_clicked(self,colorWidget,ev,rgb,data):
@@ -323,6 +327,8 @@ class ColorPicker(gtk.Fixed):
         gtkWindow = self._getWindow()
         
         self._prevColor = (colorWidget.rgb,colorWidget.data)
+        self.selecting_foreground = colorWidget == self.fgColor
+        self.palette.queue_draw()
         
         def on_click_anywhere(w_ev,data=None):
             if w_ev.type != gtk.gdk.BUTTON_PRESS:
