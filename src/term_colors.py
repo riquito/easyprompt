@@ -637,7 +637,7 @@ def __from_bash_code_values(values,styleClass):
             highColorsIdx = values.index(startVal)
             if values[highColorsIdx+1] == 5:
                 colIndex = values[highColorsIdx+2]
-                values = vales[:highColorsIdx]+values[highColorsIdx+3:]
+                values = values[:highColorsIdx]+values[highColorsIdx+3:]
         except (ValueError,IndexError) as e:
             pass
         
