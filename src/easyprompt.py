@@ -368,23 +368,36 @@ class BashColorPicker(ColorPicker):
             colors = [x.rgb for x in bash_colors[:num_columns]]
             grayscaleColors = None
             reorder = False
+            
+            cells_width = cells_height = 30
+            width = cells_width*num_columns
+            height = cells_width*2
+            
         else:
             num_columns = len(GRAYSCALE)
             # visible colors are all but grayscale colors (not counting white and black)
             colors = [x.rgb for x in bash_colors[:-(len(GRAYSCALE)-2)]]
             grayscaleColors = [x.rgb for x in GRAYSCALE]
             reorder = True
+            
+            width = 510
+            num_rows = int(ceil(len(bash_colors)/float(num_columns)))
+            cells_width = int(ceil(width/float(num_columns)))
+            height = 170-cells_width
+            cells_height = int(height/num_rows)
         
         self.bash_colors = bash_colors
         
         super(BashColorPicker,self).__init__(colors,grayscaleColors,{
             'num_columns':num_columns,
-            'cells_width':20,
-            'cells_height':20,
-            'previewer_width':20,
-            'previewer_height':20,
+            'cells_width':cells_width,
+            'cells_height':cells_height,
+            'previewer_width':cells_width,
+            'previewer_height':cells_width,
             'reorder':reorder
         })
+        
+        self.set_size_request(width,height)
         
         self._brightness = None
     
