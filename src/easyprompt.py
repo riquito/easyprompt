@@ -15,7 +15,7 @@ import gtk,pango,gobject
 from math import floor,ceil
 
 import shell
-from term_colors import (BashColor,ANSIColor,TERM_COLORS,ANSI_COLORS,GRAYSCALE,WHITE,
+from term_colors import (BashColor,ANSIColor,TERM_COLORS,ANSI_COLORS,GRAYSCALE,WHITE,BLACK,
                          lighter_rgb,darker_rgb,rgb2hex,TextStyle,parse_bash_code)
 from colorPicker import ColorPicker,ColorWidget
 
@@ -404,9 +404,9 @@ class BashColorPicker(ColorPicker):
     def _get_rgb_for_brightness(self,rgb,idx,colorWidget):
         if colorWidget==self.fgColor and idx!=None and idx<8:
             if self._brightness:
-                return TERM_COLORS[idx+8].rgb
+                return self.bash_colors[idx+8].rgb
             else:
-                return TERM_COLORS[idx].rgb
+                return self.bash_colors[idx].rgb
         else:
             return rgb
     
@@ -429,7 +429,7 @@ class BashColorPicker(ColorPicker):
         elif col_data['data'] is None:
             return None
         else:
-            return COLORS[col_data['data']]
+            return self.bash_colors[col_data['data']]
     
     def get_bashColor_background(self):
         return self._get_bashColor(background=True)
@@ -454,13 +454,13 @@ class BashColorPicker(ColorPicker):
             
             getattr(super(self.__class__,self),method)(rgb,idx)
     
-    def set_brightness(self,tstyle):
-        self._brightness = weight = tstyle.weight
+    def set_brightness(self,weight):
+        self._brightness = weight
         
         if weight == GtkTextStyle.WEIGHT_BOLD:
             # the first 8 colors has always as bold counterpart the next 8 colors, whatever they are
             if self.selecting_foreground:
-                func = lambda rgb,i: (i!=None and i<8) and tuple(x/255. for x in TERM_COLORS[i+8].rgb) or rgb
+                func = lambda rgb,i: (i!=None and i<8) and tuple(x/255. for x in COLORS[i+8].rgb) or rgb
             else:
                 func = None
             self.palette.set_color_mask(func)
@@ -489,7 +489,9 @@ class BashColorPicker(ColorPicker):
                 self.grayscalePalette.set_color_mask(lambda rgb,i: darker_rgb(rgb))
             
         """ 
-            
+    
+    def get_brightness(self):
+        return self._brightness
 
 class Styling(gtk.VBox):
     __gsignals__ = {
@@ -631,18 +633,14 @@ class Styling(gtk.VBox):
         
         ### COLORS ###
         
-        vbox = gtk.VBox()
-        
-        self.picker = BashColorPicker(COLORS)
-        self.picker.bgColor.connect('color-changed', lambda *args: self._on_style_changed())
-        self.picker.fgColor.connect('color-changed', lambda *args: self._on_style_changed())
-        vbox.pack_start(self.picker,0,0,2)
-        
-        vbox.show()
+        self.pickerBox = gtk.VBox()
+        self.picker = None
+        self.restore_picker()
+        self.pickerBox.show()
         
         ### END colors ###
         
-        hbox.pack_start(vbox,1,1,2)
+        hbox.pack_start(self.pickerBox,1,1,2)
         hbox.show()
         
         boxColorsAndStyle.pack_start(hbox,0,0,2)
@@ -651,6 +649,34 @@ class Styling(gtk.VBox):
         self.pack_start(boxColorsAndStyle,1,1,0)
         
         self.reset()
+    
+    def restore_picker(self):
+        brightness = None
+        bg,fg = None,None
+        if self.picker:
+            brightness = self.picker.get_brightness()
+            bg,fg = self.picker.get_bashColor_background(),self.picker.get_bashColor_foreground()
+            self.pickerBox.remove(self.picker)
+        
+        self.picker = BashColorPicker(COLORS)
+        self.picker.bgColor.connect('color-changed', lambda *args: self._on_style_changed())
+        self.picker.fgColor.connect('color-changed', lambda *args: self._on_style_changed())
+        
+        if brightness:
+            self.picker.set_brightness(brightness)
+        
+        self.picker.show()
+        
+        self.pickerBox.pack_start(self.picker,0,0,2)
+        
+        if bg or fg:
+            if bg and not bg in COLORS:
+                bg = None
+            if fg and not fg in COLORS:
+                fg = None
+            
+            self.picker.set_bg_fg(bg,fg)
+        
     
     def reset(self):
         self.set_current_command(self.get_current_command())
@@ -672,7 +698,7 @@ class Styling(gtk.VBox):
             self.gtkCommandsBox.get_active_command().tstyle = tstyle
         print '\nstyle changed',self.gtkCommandsBox.get_active_command().tstyle,"\n"
         
-        self.picker.set_brightness(tstyle)
+        self.picker.set_brightness(tstyle.weight)
         
         self.emit('changed')
     
@@ -756,7 +782,7 @@ class FormatPromptTextView(gtk.TextView):
         
         table=self.buffer.get_tag_table()
         
-        for color in COLORS:
+        for color in TERM_COLORS:
             
             for weight in (
                 GtkTextStyle.WEIGHT_FAINT,
@@ -766,7 +792,7 @@ class FormatPromptTextView(gtk.TextView):
                 
                 if weight == GtkTextStyle.WEIGHT_BOLD:
                     if color.index<8:
-                        rgb = COLORS[color.index+8].rgb
+                        rgb = TERM_COLORS[color.index+8].rgb
                     else:
                         rgb = lighter_rgb(color.rgb)
                 elif weight ==GtkTextStyle.WEIGHT_FAINT:
@@ -1204,8 +1230,6 @@ class Window(gtk.Window):
         self.set_border_width(5)
         self.connect('delete-event',self.on_delete_event)
         
-        self.colors = COLORS
-        
         vbox=gtk.VBox()
         
         menu_bar_ui = \
@@ -1213,6 +1237,7 @@ class Window(gtk.Window):
         <ui>
             <menubar name="MenuBar">
                 <menu action="File">
+                    <menuitem action="Colors"/>
                     <menuitem action="Quit"/>
                 </menu>
                 <menu action="About" name="AboutMenu">
@@ -1229,6 +1254,10 @@ class Window(gtk.Window):
             ("Version", gtk.STOCK_ABOUT, "_Version", None, "Show current version", self.show_about_dialog)
         ])
         
+        action_group.add_toggle_actions([
+            ("Colors", None, "_256 colors",None,None,self.on_menu_colors_toggled)
+        ])
+        
         ui_manager = gtk.UIManager()
         accel_group = ui_manager.get_accel_group()
         self.add_accel_group(accel_group)
@@ -1238,7 +1267,6 @@ class Window(gtk.Window):
         menu_bar = ui_manager.get_widget("/MenuBar")
         menu_bar.show()
         vbox.pack_start(menu_bar,0,0,0)
-
         
         topBox=gtk.VBox()
         
@@ -1316,6 +1344,16 @@ class Window(gtk.Window):
         self.get_system_prompt(self.set_prompt_from_bash_string)
         
         self.show()
+    
+    def on_menu_colors_toggled(self,menuItem):
+        global COLORS
+        if menuItem.get_active():
+            COLORS = TERM_COLORS
+        else:
+            COLORS = ANSI_COLORS
+        
+        self.stylingBox.restore_picker()
+        self.on_style_changed(self.stylingBox)
     
     def show_about_dialog(self,menuItem):
         dialog = gtk.AboutDialog()
@@ -1416,8 +1454,8 @@ class Window(gtk.Window):
             gdkColors = shell.getGnomeTerminalColors()
         except:
             gdkColors = {
-                'foreground' : gtk.gdk.color_parse(COLORS[15].hexcolor),
-                'background' : gtk.gdk.color_parse(COLORS[0].hexcolor),
+                'foreground' : gtk.gdk.color_parse(WHITE.hexcolor),
+                'background' : gtk.gdk.color_parse(BLACK.hexcolor),
                 'palette'    : [gtk.gdk.color_parse(col.hexcolor) for col in ANSI_COLORS]
             }
         
