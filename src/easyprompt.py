@@ -9,6 +9,8 @@ __copyright__ = 'Copyright © Riccardo Attilio Galli'
 __website__ = 'http://www.sideralis.org'
 __license__ = 'GPLv3'
 
+import logging
+
 import os,sys,re
 import gtk,pango,gobject
 
@@ -52,7 +54,6 @@ class CommandPlugin(object):
     _cache = {}
     
     def __init__(self,plugin):
-        print plugin
         self.keyword = plugin['keyword']
         self.bash_command = plugin['command']
         self.example = plugin['example']
@@ -113,23 +114,26 @@ def get_tag_bounds(iter,tag,word_length=None):
     if not startIter.begins_tag(tag):
         startIter.backward_to_tag_toggle(tag)
     
-    print 'tag_bounds',startIter.get_offset(),endIter.get_offset()
-    
     """
-    12 3456789 10 11 12
-    aa bbbbbbb b  b  c
-           x
+    An example about how this works
     
-    iterOffset = iter.getOffset() #7
+    1 234567 89
+    a bbbbbb cc
+          x
     
-    startOffset = startIter.getOffset()  #3
-    endOffset = endIter.getOffset()      #12
+    word_length = 2 # length of bb word
     
-    (iterOffset - startOffset) = 4
+    iterOffset = iter.getOffset() #6
     
-    int(4 / word_length) * word_length
+    startIter = iter.copy().backward_to_tag_toggle(b)
+    
+    startOffset = startIter.getOffset()  #2
+    endOffset = endIter.getOffset()      #8
+    
+    (iterOffset - startOffset) == 4
+    
+    int(4 / word_length) * word_length == 4 # so the word start at startOffset+4
     """
-    
     
     if word_length:
         iterOffset = iter.get_offset()
@@ -139,8 +143,6 @@ def get_tag_bounds(iter,tag,word_length=None):
         startIter = iter.get_buffer().get_iter_at_offset(startOffset + gapOffset)
         endIter = startIter.copy()
         endIter.forward_chars(word_length)
-    
-    print 'now tag_bounds',startIter.get_offset(),endIter.get_offset()
     
     return (startIter,endIter)
 
@@ -294,7 +296,7 @@ class GtkTextStyle(TextStyle):
         if tstyle.invert and not tstyle.is_inconsistent('invert'):
             tags.append(tag_table.lookup('invert'))
         
-        print 'to gtk tags',[tag.get_property('name') for tag in tags]
+        logging.debug('to_gtk_tags() %r',[tag.get_property('name') for tag in tags])
         
         return tags
     
@@ -351,14 +353,16 @@ class GtkTextStyle(TextStyle):
             currentIter.forward_char()
         
         
-        print 'text styles',text_styles
+        logging.debug('going to merge styles %r',text_styles)
         tstyle = GtkTextStyle.merge_styles(text_styles)
-        print 'now tstyle',tstyle
+        logging.debug('styles merged as %s',tstyle)
         
         if tstyle.invert==True:
             tstyle.background, tstyle.foreground = tstyle.foreground, tstyle.background
-        print 'from gtk selection',tstyle
+            logging.debug('styles bg/fg inverted')
+        
         return tstyle
+        
 
 class BashColorPicker(ColorPicker):
     def __init__(self,bash_colors):
@@ -578,13 +582,11 @@ class Styling(gtk.VBox):
                     tstyle.set_inconsistent(attrName)
                 else:
                     setattr(tstyle,attrName,toggleBtn.get_active())
-                print attrName,toggleBtn.get_inconsistent(),toggleBtn.get_active()
             
             return tstyle
         
         def set_styles(self,tstyle):
             self._can_send_signals=False
-            print 'set_styles',tstyle
             
             for attrName in ('underline','strikethrough','invert'):
                 toggleBtn = getattr(self,attrName+'Btn')
@@ -687,16 +689,18 @@ class Styling(gtk.VBox):
         tstyle = self.frameStyles.get_styles()
         tstyle.background = self.picker.get_bashColor_background()
         tstyle.foreground = self.picker.get_bashColor_foreground()
-        print tstyle.background,tstyle.foreground
         
         return tstyle
     
     def _on_style_changed(self):
         tstyle = self._export_current_style()
-        print 'on style changed (cur)',tstyle
+        
+        cmdKeyword = ''
         if self.gtkCommandsBox.is_sensitive():
             self.gtkCommandsBox.get_active_command().tstyle = tstyle
-        print '\nstyle changed',self.gtkCommandsBox.get_active_command().tstyle,"\n"
+            cmdKeyword = self.gtkCommandsBox.get_active_command().keyword
+        
+        logging.debug('class %s, style changed (cmd=%s) %s',self.__class__.__name__,cmdKeyword if cmdKeyword else 'None',tstyle)
         
         self.picker.set_brightness(tstyle.weight)
         
@@ -706,18 +710,16 @@ class Styling(gtk.VBox):
         return self._export_current_style()
     
     def set_styling(self,tstyle):
-        print 'set styling',tstyle
         self.picker.set_bg_fg(tstyle.background,tstyle.foreground)
-        
         self.frameStyles.set_styles(tstyle)
-        print 'just set',self._export_current_style()
         self._on_style_changed()
     
     def _on_command_requested(self,widget,key):
         self.emit('activate',key)
     
     def _on_command_changed(self,keywordBox,command):
-        print 'command changed',command,command.tstyle
+        logging.debug('command changed %s (style is %s)',command,command.tstyle)
+        
         tstyle = command.tstyle
         self.picker.set_bg_fg(tstyle.background,tstyle.foreground)
         self.frameStyles.set_styles(tstyle)
@@ -913,15 +915,12 @@ class FormatPromptTextView(gtk.TextView):
         self.emit('changed')
     
     def change_command_appearance(self,command,styleObj):
-        
         tagTable=self.buffer.get_tag_table()
         tag=tagTable.lookup(command.keyword)
         
-        print 'key',command,command.tstyle
         GtkTextStyle.update_gtk_tag(tag,command.tstyle)
     
     def change_selection_appearance(self,tstyle,startIter,endIter):
-        
         tag_table = self.buffer.get_tag_table()
         
         def get_inconsistent_tags(tstyle,tag_table):
@@ -1059,7 +1058,6 @@ class FormatPromptTextView(gtk.TextView):
         
         for tag in current_iter.get_tags():
             tagName = tag.get_property('name')
-            print 'tag is',tagName
             command = CommandPlugin.lookup(tagName)
             if command:
                 
@@ -1471,16 +1469,19 @@ class Window(gtk.Window):
             start,end = textview.buffer.get_selection_bounds()
             
             if command:
+                logging.debug('Selected a keyword')
                 self.stylingBox.activate_command()
                 self.stylingBox.set_current_command(command)
             else:
                 self.stylingBox.deactivate_command()
                 tstyle = GtkTextStyle.from_gtk_selection(start,end)
-                print 'selected. style is ',tstyle
+                
+                logging.debug('Selected free text, style is %s',tstyle)
+                
                 self.stylingBox.set_styling(tstyle)
             
         except ValueError, e:
-            print 'NO SELECTION, call stylingBox.activate_keyword()'
+            logging.debug('Empty selection, call stylingBox.activate_command()')
             self.stylingBox.activate_command()
     
     def convert_to_bash_and_preview(self,*args):
@@ -1489,7 +1490,6 @@ class Window(gtk.Window):
         self.code_preview(converted)
     
     def preview(self,prompt_format):
-        print '>>>',repr(prompt_format)
         self.term.set_prompt(prompt_format)
         self.term.clear()
     
@@ -1553,10 +1553,10 @@ class Window(gtk.Window):
             bash_ps1 = r'\\'*(numBackslashes-1) + '\\\\'
         '''
         
-        print '__',repr(bash_ps1)
-        
         # add \[ \] around escaping sequences to ensure aren't counted as printable characters
         bash_ps1 = re.sub(r'(\\e\[[0-9;]+?m)',r'\[\1\]',bash_ps1)
+        
+        logging.debug('Terminal prompt format: %r',bash_ps1)
         
         return bash_ps1
     
@@ -1647,9 +1647,15 @@ class Window(gtk.Window):
         gtk.main()
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     import locale,shutil,json
     import i18n
+    
+    logLevel = logging.WARN
+    if os.getenv('EASYPROMPT_DEBUG',False):
+        logLevel = logging.DEBUG
+    
+    logging.basicConfig(format='%(levelname)s %(message)s',level=logLevel)
     
     language_code,encoding = locale.getdefaultlocale()
     if language_code.upper() == 'C':
