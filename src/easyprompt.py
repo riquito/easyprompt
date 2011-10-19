@@ -352,10 +352,11 @@ class GtkTextStyle(TextStyle):
             
             currentIter.forward_char()
         
-        
-        logging.debug('going to merge styles %r',text_styles)
+        if len(text_styles) > 1:
+            logging.debug('going to merge styles %r',text_styles)
         tstyle = GtkTextStyle.merge_styles(text_styles)
-        logging.debug('styles merged as %s',tstyle)
+        if len(text_styles) > 1:
+            logging.debug('styles merged as %s',tstyle)
         
         if tstyle.invert==True:
             tstyle.background, tstyle.foreground = tstyle.foreground, tstyle.background
@@ -968,7 +969,6 @@ class FormatPromptTextView(gtk.TextView):
         
         tags = GtkTextStyle.to_gtk_tags(tstyle,tag_table)
         for tag in tags:
-            print tag.get_property('name')
             self.buffer.apply_tag(tag,startIter,endIter)
         
     def _on_mouse_button_released(self,textview,event):
@@ -1655,7 +1655,7 @@ if __name__ == '__main__':
     if os.getenv('EASYPROMPT_DEBUG',False):
         logLevel = logging.DEBUG
     
-    logging.basicConfig(format='%(levelname)s %(message)s',level=logLevel)
+    logging.basicConfig(format='%(levelname)s %(asctime)s %(message)s',level=logLevel)
     
     language_code,encoding = locale.getdefaultlocale()
     if language_code.upper() == 'C':
