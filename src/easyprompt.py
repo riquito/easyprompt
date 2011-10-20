@@ -1556,6 +1556,9 @@ class Window(gtk.Window):
         # add \[ \] around escaping sequences to ensure aren't counted as printable characters
         bash_ps1 = re.sub(r'(\\e\[[0-9;]+?m)',r'\[\1\]',bash_ps1)
         
+        # escape ' for using ps1 as a strong quoted string
+        bash_ps1 = bash_ps1.replace("'","'\\''")
+        
         logging.debug('Terminal prompt format: %r',bash_ps1)
         
         return bash_ps1
