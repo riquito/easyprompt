@@ -381,7 +381,7 @@ class TextStyle(object):
     FOREGROUND = 'foreground'
     
     def __init__(self):
-        self._weight = None
+        self._weight = self.WEIGHT_NORMAL
         self._invert = False
         self._underline = False
         self._strikethrough = False
@@ -513,6 +513,8 @@ class TextStyle(object):
         
         if attr1 == attr2:
             return attr1
+        elif attrName=='_weight' and TextStyle.WEIGHT_NORMAL in (attr1,attr2) and not None in (attr2,attr2):
+            return attr1 if attr1!=TextStyle.WEIGHT_NORMAL else attr2
         
         # with fill_empty_properties if a properties is set and the
         # other unset it doesn't become INCONSISTENT

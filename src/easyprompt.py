@@ -23,6 +23,8 @@ from colorPicker import ColorPicker,ColorWidget
 
 from i18n import _
 
+from easy_selection_textview import EasySelectionTextview
+
 COLORS = ANSI_COLORS
 #COLORS = TERM_COLORS
 
@@ -402,7 +404,7 @@ class BashColorPicker(ColorPicker):
             'reorder':reorder
         })
         
-        self.set_size_request(width,height)
+        self.set_size_request(width,height+10)
         
         self._brightness = None
     
@@ -762,21 +764,20 @@ class Styling(gtk.VBox):
 
 gobject.type_register(Styling)
 
-class FormatPromptTextView(gtk.TextView):
+
+class FormatPromptTextView(EasySelectionTextview):
     __gsignals__ = {
-        'selection-toggle' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                (gobject.TYPE_BOOLEAN,)),
-        'selection-change' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                (gobject.TYPE_PYOBJECT,)),
         'changed': (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
                 ()),
+        'cursor-moved': (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,())
+        
     }
     
     DEFAULT_BACKGROUND=(0,0,0)
     DEFAULT_FOREGROUND=(255,255,255)
     
     def __init__(self,*args):
-        gtk.TextView.__init__(self,*args)
+        super(FormatPromptTextView,self).__init__(*args)
         self.modify_font(pango.FontDescription('Monospace 11'))
         self.set_property('left-margin',2) 
         self.modify_base(gtk.STATE_NORMAL,gtk.gdk.color_parse('#000000'))
@@ -841,34 +842,25 @@ class FormatPromptTextView(gtk.TextView):
         tag=gtk.TextTag('invert')
         table.add(tag)
         
-        def on_delete_range(buffer,startIter,endIter):
-            res = self.get_command_at_iter(startIter)
-            if res:
-                buffer.handler_block(self.id_delete_range)
-                buffer.delete(res['start'],res['end'])
-                buffer.handler_unblock(self.id_delete_range)
-                
-                buffer.emit_stop_by_name('delete-range')
-            
-        self.id_delete_range = self.buffer.connect('delete-range',on_delete_range);
+        self._last_pos = 0
+        self._selected_keyword = None
         
-        # add selection change capabilities
-        self._has_selection = False
-        self._skip_mouse_release = False
-        self.id_has_sel=self.buffer.connect('notify::has-selection', self.on_selection_toggle)
-        self.id_move_cursor=self.connect_after('move-cursor', self.on_move_cursor)
+        self.id_delete_range = self.buffer.connect('delete-range',self._on_delete_range)
         
-        self.connect('button-release-event', self._on_mouse_button_released)
+        self._id_move_cursor = self.buffer.connect_after('notify::cursor-position',self._on_cursor_position_changed)
+        self._id_selection_change = self.connect('selection-change',self._on_selection_changed)
         
-        self.connect('button-press-event', self.on_mouseBtn_down)
-        
-        self.id_buf_changed=self.buffer.connect('changed', self.on_content_change)
+        self.id_buf_changed = self.buffer.connect('changed',self._on_content_change)
     
-    def on_mouseBtn_down(self,*args):
-        if self._has_selection:
-            self._skip_mouse_release = True
-        else:
-            self._skip_mouse_release = False
+    
+    def _on_delete_range(self,buffer,startIter,endIter):
+        res = self.get_command_at_iter(startIter)
+        if res:
+            buffer.handler_block(self.id_delete_range)
+            buffer.delete(res['start'],res['end'])
+            buffer.handler_unblock(self.id_delete_range)
+            
+            buffer.emit_stop_by_name('delete-range')
     
     def change_base_colors(self,tstyle):
         if not tstyle.is_inconsistent('background'):
@@ -882,7 +874,6 @@ class FormatPromptTextView(gtk.TextView):
                 self.modify_text(gtk.STATE_NORMAL,gtk.gdk.color_parse(tstyle.foreground.hexcolor))
             else:
                 self.modify_text(gtk.STATE_NORMAL,gtk.gdk.color_parse(rgb2hex(FormatPromptTextView.DEFAULT_FOREGROUND)))
-            
     
     def _find_keyword_pos(self,text,keywordName):
         
@@ -900,7 +891,7 @@ class FormatPromptTextView(gtk.TextView):
         
         return positions
     
-    def on_content_change(self,buffer,*args):
+    def _on_content_change(self,buffer,*args):
         text = buffer.get_text(*buffer.get_bounds())
         
         for command in COMMANDS:
@@ -970,36 +961,30 @@ class FormatPromptTextView(gtk.TextView):
         tags = GtkTextStyle.to_gtk_tags(tstyle,tag_table)
         for tag in tags:
             self.buffer.apply_tag(tag,startIter,endIter)
-        
-    def _on_mouse_button_released(self,textview,event):
-        if not self._skip_mouse_release and self._has_selection:
-            self._on_selection_changed()
-        else:
-            selectedKeyword = self._try_to_select_keyword(self.buffer,True)
-            if selectedKeyword: self._on_selection_changed(selectedKeyword)
     
     def reset_colors(self):
         self.buffer.handler_block(self.id_buf_changed)
         self.buffer.remove_all_tags(*self.buffer.get_bounds())
         self.buffer.handler_unblock(self.id_buf_changed)
         self.buffer.emit('changed')
+    
+    def _on_cursor_position_changed(self,buffer,position):
+        # XXX position is a GParamInt : how can you access the value ?
+        current_pos = buffer.get_property("cursor-position")
         
-    def on_move_cursor(self,textview,step_size,count,extend_selection):
-        if extend_selection:
-            try:
-                start, end = self.buffer.get_selection_bounds()
-                selected_text = self.buffer.get_text(start, end)
-                if len(selected_text) > 0: # when is 0 the 'selection-end' signal is automatically emitted
-                    self._on_selection_changed()
-            except ValueError, e:
-                pass
-        else:
-            selectedKeyword = self._try_to_select_keyword(textview.buffer,count > 0)
-            self._on_selection_changed(selectedKeyword)
+        if current_pos != self._last_pos:
+            self._last_pos = current_pos
+            if not self.selecting():
+                self._try_to_select_keyword(self.buffer,True)
+                self.emit('cursor-moved')
+    
+    def _on_selection_changed(self,widget,startIter,endIter,selectingDirection):
+        self._try_to_select_keyword(self.buffer,selectingDirection)
     
     def _try_to_select_keyword(self,buffer,move_left_to_right):
         
-        self.handler_block(self.id_move_cursor)
+        self.buffer.disconnect(self._id_move_cursor)
+        self.disconnect(self._id_selection_change)
         
         selectedKeyword = None
         current_iter = buffer.get_iter_at_mark(buffer.get_insert())
@@ -1034,23 +1019,18 @@ class FormatPromptTextView(gtk.TextView):
             
             break
         
-        self.handler_unblock(self.id_move_cursor)
+        
+        self._selected_keyword = selectedKeyword
+        
+        self._id_move_cursor = self.buffer.connect('notify::cursor-position',self._on_cursor_position_changed)
+        self._id_selection_change = self.connect('selection-change',self._on_selection_changed)
         
         return selectedKeyword
     
-    def on_selection_toggle(self,buffer,*args):
-        self._has_selection = not self._has_selection
-        self.emit('selection-toggle',self._has_selection)
-        if not self._has_selection:
-            self._on_selection_changed()
     
-    def _on_selection_changed(self,selectedKeyword=None):
-        buffer = self.buffer
-        
-        if not selectedKeyword:
-            selectedKeyword = self._try_to_select_keyword(buffer,True)
-        
-        self.emit('selection-change',CommandPlugin.lookup(selectedKeyword))
+    @property
+    def selected_keyword(self):
+        return self._selected_keyword
     
     def get_command_at_iter(self,current_iter):
         
@@ -1266,6 +1246,8 @@ class Window(gtk.Window):
         menu_bar.show()
         vbox.pack_start(menu_bar,0,0,0)
         
+        self.ignoreStyleChange = False
+        
         topBox=gtk.VBox()
         
         self.stylingBox=Styling()
@@ -1285,7 +1267,9 @@ class Window(gtk.Window):
         txtBox=gtk.HBox()
         
         self.textview=FormatPromptTextView()
-        self.fpt_sel_changed_id=self.textview.connect('selection-change',self.on_formatPrompt_selection_change)
+        self.fpt_sel_changed_id=self.textview.connect('selection-end',self.on_formatPrompt_selection_end)
+        #self.textview.connect('cursor-moved',self.on_formatPrompt_selection_end)
+        
         self.fpt_changed_id=self.textview.connect('changed',self.convert_to_bash_and_preview)
         self.textview.show()
         
@@ -1461,11 +1445,13 @@ class Window(gtk.Window):
         term.set_size(term.get_column_count(),10)
         return term
     
-    def on_formatPrompt_selection_change(self,textview,command):
-        if self.baseColorsCheckBtn.get_active():
+    def on_formatPrompt_selection_end(self,textview,*args):
+        if textview.selecting() or self.baseColorsCheckBtn.get_active():
             return
         
+        logging.debug('Selection end')
         try:
+            command = CommandPlugin.lookup(textview.selected_keyword)
             start,end = textview.buffer.get_selection_bounds()
             
             if command:
@@ -1473,12 +1459,14 @@ class Window(gtk.Window):
                 self.stylingBox.activate_command()
                 self.stylingBox.set_current_command(command)
             else:
+                self.ignoreStyleChange = True
+                
                 self.stylingBox.deactivate_command()
                 tstyle = GtkTextStyle.from_gtk_selection(start,end)
-                
                 logging.debug('Selected free text, style is %s',tstyle)
-                
                 self.stylingBox.set_styling(tstyle)
+                
+                self.ignoreStyleChange = False
             
         except ValueError, e:
             logging.debug('Empty selection, call stylingBox.activate_command()')
@@ -1625,6 +1613,9 @@ class Window(gtk.Window):
             self.term.set_color_foreground(gtk.gdk.color_parse(hexFg))
     
     def on_style_changed(self,stylingObj):
+        if self.ignoreStyleChange:
+            return
+        
         tstyle = stylingObj.get_styling()
         
         if self.baseColorsCheckBtn.get_active():
